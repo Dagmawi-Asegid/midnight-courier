@@ -4,9 +4,9 @@
  * well clear (or immediately once it startles the player).
  */
 export class Pedestrian {
-  constructor(originX, originY, crossesHorizontalRoad, laneIndex) {
+  constructor(originX, originY, crossesHorizontalRoad, laneIndex, speedScale = 1) {
     const lane = (laneIndex - 0.5) * 22;
-    const speed = 24;
+    const speed = 24 * speedScale;
     if (crossesHorizontalRoad) {
       this.x = originX + lane;
       this.y = originY - 70;

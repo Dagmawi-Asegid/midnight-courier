@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { UPGRADE_CATEGORIES, UPGRADE_CATEGORY_META, UPGRADE_DEFS, upgradeCost } from '../game/engine/constants.js';
+import { getDifficulty } from '../game/engine/difficulty.js';
 import { formatMoney } from '../game/utils/math.js';
 import { playDeniedSound, playPurchaseSound } from '../game/utils/sound.js';
 
-function UpgradeCard({ def, level, totalMoney, onBuy }) {
+function UpgradeCard({ def, level, totalMoney, costMultiplier, onBuy }) {
   const [feedback, setFeedback] = useState(null); // 'bought' | 'denied' | null
 
   const maxed = level >= def.maxLevel;
-  const cost = maxed ? null : upgradeCost(def, level);
+  const cost = maxed ? null : upgradeCost(def, level, costMultiplier);
   const affordable = !maxed && totalMoney >= cost;
   const nextBenefit = maxed ? null : def.benefit(level + 1);
 
@@ -52,11 +53,19 @@ function UpgradeCard({ def, level, totalMoney, onBuy }) {
   );
 }
 
-export default function UpgradeScreen({ totalMoney, upgradeLevels, onBuy, onStartNextNight, onQuit }) {
+export default function UpgradeScreen({ totalMoney, upgradeLevels, night, onBuy, onStartNextNight, onQuit }) {
+  const costMultiplier = getDifficulty(night).upgradeCostMultiplier;
+  const pricesUp = costMultiplier > 1.02;
+
   return (
     <div className="screen upgrade-screen">
       <h2 className="upgrade-title">Garage</h2>
       <p className="upgrade-subtitle">Balance: {formatMoney(totalMoney)}</p>
+      {pricesUp && (
+        <p className="upgrade-price-note">
+          Parts run {Math.round((costMultiplier - 1) * 100)}% pricier this deep into the run.
+        </p>
+      )}
 
       <div className="upgrade-scroll">
         {UPGRADE_CATEGORIES.map((category) => {
@@ -78,6 +87,7 @@ export default function UpgradeScreen({ totalMoney, upgradeLevels, onBuy, onStar
                     def={def}
                     level={upgradeLevels[def.id] || 0}
                     totalMoney={totalMoney}
+                    costMultiplier={costMultiplier}
                     onBuy={onBuy}
                   />
                 ))}

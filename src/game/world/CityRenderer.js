@@ -1,8 +1,6 @@
-import { CELL_SIZE, DISTRICTS, ROAD_WIDTH, TRAFFIC_LIGHT_CONFIG } from '../engine/constants.js';
+import { CELL_SIZE, DISTRICTS, ROAD_WIDTH } from '../engine/constants.js';
+import { getTrafficLightPhase } from '../engine/trafficLightPhase.js';
 import { CULL_MARGIN, isVisible } from '../utils/viewport.js';
-
-const LIGHT_CYCLE =
-  TRAFFIC_LIGHT_CONFIG.greenDuration + TRAFFIC_LIGHT_CONFIG.yellowDuration + TRAFFIC_LIGHT_CONFIG.redDuration;
 
 /** Draws the asphalt grid, lane markings and curb lines. */
 function drawRoads(ctx, city, camera) {
@@ -354,16 +352,14 @@ function drawStreetlights(ctx, city, camera) {
   }
 }
 
-/** Decorative signal boxes at busier intersections, cycling green/yellow/red purely for atmosphere. */
+const PHASE_COLORS = { green: '#3fff6a', yellow: '#ffd23f', red: '#ff3b3b' };
+
+/** Signal boxes at busier intersections — NPC traffic actually obeys these (see NPCVehicle). */
 function drawTrafficLights(ctx, city, camera, time) {
   for (const t of city.trafficLights) {
     if (!isVisible(camera, t.x, t.y, 40)) continue;
 
-    const cyclePos = (time + (t.x * 0.013 + t.y * 0.017)) % LIGHT_CYCLE;
-    let color = '#ff3b3b';
-    if (cyclePos < TRAFFIC_LIGHT_CONFIG.greenDuration) color = '#3fff6a';
-    else if (cyclePos < TRAFFIC_LIGHT_CONFIG.greenDuration + TRAFFIC_LIGHT_CONFIG.yellowDuration) color = '#ffd23f';
-
+    const color = PHASE_COLORS[getTrafficLightPhase(time, t)];
     const px = t.x + ROAD_WIDTH / 2 + 10;
     const py = t.y - ROAD_WIDTH / 2 - 10;
 

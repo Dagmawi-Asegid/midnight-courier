@@ -328,7 +328,11 @@ export class City {
   _placeAmbientAnchor(rng, building) {
     const side = pick(rng, SIDES);
     const { x, y } = this._edgePoint(building, side, range(rng, 0.2, 0.8), 22);
-    this.ambientAnchors.push({ x, y, district: building.district });
+    // A pedestrian anchored on a building's n/s edge walks the sidewalk along x (parallel to
+    // that edge); e/w edges walk along y — so ambient walkers stay parallel to the building
+    // instead of wandering in place.
+    const axis = side === 'n' || side === 's' ? 'x' : 'y';
+    this.ambientAnchors.push({ x, y, district: building.district, axis });
   }
 
   /** A small sidewalk food/coffee cart — one of a handful of street-vendor touches, not on every block. */

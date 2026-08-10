@@ -238,8 +238,8 @@ export function computeStatsFromUpgrades(levels) {
   return stats;
 }
 
-export function upgradeCost(def, currentLevel) {
-  return Math.round(def.baseCost * Math.pow(def.costGrowth, currentLevel));
+export function upgradeCost(def, currentLevel, costMultiplier = 1) {
+  return Math.round(def.baseCost * Math.pow(def.costGrowth, currentLevel) * costMultiplier);
 }
 
 // ---------- delivery gameplay tuning ----------
@@ -453,3 +453,17 @@ export const TRAFFIC_LIGHT_CONFIG = {
 export const AMBIENT_PEDESTRIAN_MAX = 34;
 
 export const PARKED_CAR_COLORS = ['#8a8f9a', '#5c6470', '#9a5c5c', '#5c7a9a', '#7a7050', '#4a4e58'];
+
+// ---------- NPC traffic ----------
+// Most traffic is plain background cars; a small weighted slice is one of a few special
+// types with their own color, size and pace so the streets read as a real mixed city fleet
+// rather than palette-swapped clones. `speedRange` is in px/s (the cruise speed NPCVehicle
+// eases toward); `lightBar` types flash a roof light and get right-of-way visual flair only
+// (no gameplay exemption — they still stop for red lights and traffic like everyone else).
+export const VEHICLE_TYPES = {
+  car: { id: 'car', weight: 0.66, colors: ['#c94b4b', '#4b8cc9', '#e0e0e0', '#c9a84b', '#7a4bc9'], speedRange: [70, 130], length: 30, lightBar: null },
+  taxi: { id: 'taxi', weight: 0.14, colors: ['#f2c94c'], speedRange: [85, 145], length: 30, lightBar: null, roofSign: true },
+  delivery: { id: 'delivery', weight: 0.1, colors: ['#e7e2d6', '#9a8768'], speedRange: [50, 90], length: 38, lightBar: null },
+  police: { id: 'police', weight: 0.06, colors: ['#1c2230'], speedRange: [100, 160], length: 32, lightBar: ['#ff3b3b', '#2fa1ff'] },
+  ambulance: { id: 'ambulance', weight: 0.04, colors: ['#eef0f2'], speedRange: [110, 170], length: 36, lightBar: ['#ff3b3b', '#ffffff'] },
+};

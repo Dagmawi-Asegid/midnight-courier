@@ -3,6 +3,71 @@
   font: 16px/1.4 'Segoe UI', system-ui, Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* ---------- design tokens ---------- */
+  --bg: #05060a;
+  --bg-elevated: #0b0d18;
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-strong: rgba(10, 12, 22, 0.72);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --border: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.24);
+
+  --accent-magenta: #ff2fd6;
+  --accent-magenta-soft: rgba(255, 47, 214, 0.45);
+  --accent-cyan: #2fe8ff;
+  --accent-cyan-soft: rgba(47, 232, 255, 0.45);
+  --accent-green: #7dff5c;
+  --accent-green-soft: rgba(125, 255, 92, 0.4);
+  --accent-amber: #ffd23f;
+  --accent-amber-soft: rgba(255, 210, 63, 0.4);
+  --accent-red: #ff5c5c;
+  --accent-red-soft: rgba(255, 92, 92, 0.45);
+
+  --text-primary: #ffffff;
+  --text-secondary: #cfd4e6;
+  --text-muted: #8891b8;
+  --text-faint: #6d76a0;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+
+  --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 380ms;
+}
+
+/* High-contrast accessibility mode: brighter text/borders for readability. */
+:root[data-contrast='high'] {
+  --surface: rgba(255, 255, 255, 0.1);
+  --surface-strong: rgba(6, 7, 14, 0.9);
+  --border: rgba(255, 255, 255, 0.32);
+  --border-strong: rgba(255, 255, 255, 0.55);
+  --text-secondary: #ffffff;
+  --text-muted: #c3c9e8;
+  --text-faint: #9aa3c7;
+}
+
+/* Reduced-flashing accessibility mode: mute the handful of blinking/pulsing cues. */
+:root[data-reduced-flashing='true'] .order-timer-fill--urgent,
+:root[data-reduced-flashing='true'] .hud-timer--urgent .hud-value,
+:root[data-reduced-flashing='true'] .nav-compass--close .nav-dial,
+:root[data-reduced-flashing='true'] .boost-meter--active .boost-meter-fill,
+:root[data-reduced-flashing='true'] .district-badge,
+:root[data-reduced-flashing='true'] .combo-badge {
+  animation: none !important;
 }
 
 * {

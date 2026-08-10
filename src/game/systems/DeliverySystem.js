@@ -1,9 +1,13 @@
 import { DeliveryPoint } from '../entities/DeliveryPoint.js';
 import { clamp, dist } from '../utils/math.js';
 import { chance, pick } from '../utils/random.js';
-import { DELIVERY_TYPES } from '../engine/constants.js';
+import { DELIVERY_TYPES, WORLD_HEIGHT, WORLD_WIDTH } from '../engine/constants.js';
 
 const CROSS_DISTRICT_CHANCE = 0.7; // how often the drop-off is pushed into a different district than the pickup
+const WORLD_DIAGONAL = Math.hypot(WORLD_WIDTH, WORLD_HEIGHT);
+const MIN_TIME_LIMIT = 6; // seconds — floor so difficulty scaling can never make an order unmakeable
+const CANDIDATE_COUNT = 3; // how many jobs are offered at once in the selection panel
+export const AUTO_SELECT_TIMEOUT = 7; // seconds before the game picks for you, so the run never stalls
 
 const SIDE_OFFSETS = {
   n: (b) => ({ x: b.x + b.w / 2, y: b.y - 22 }),
@@ -25,24 +29,33 @@ function pickDeliveryType(rng) {
 }
 
 /**
- * Drives the accept -> ride -> deliver loop. One active order at a time.
- * Both the pickup and drop-off are generated together (and shown together)
- * so the player can weigh the job before committing. Accepting at the
- * pickup starts a per-delivery countdown; arriving at the drop-off within
- * that window auto-completes the delivery — no button needed, matching the
- * "ride there and arrive" fantasy. Running out of time fails the order
- * (lost payout, streak reset) and immediately queues a new one so the night
- * keeps moving.
+ * Drives the offer -> accept -> ride -> deliver loop. Whenever there's no active order, up to
+ * `CANDIDATE_COUNT` candidate jobs are generated and offered together in a selection panel so
+ * the player can weigh pay/distance/risk before committing to one — but choosing is never
+ * mandatory: leaving it too long auto-selects the first candidate so a distracted or exploring
+ * player is never soft-locked without a job. Once a job is chosen, the flow is unchanged from
+ * before: accepting at the pickup starts a per-delivery countdown, and arriving at the drop-off
+ * within that window auto-completes the delivery — no button needed, matching the "ride there
+ * and arrive" fantasy. Running out of time fails the order (lost payout, streak reset) and
+ * immediately offers a fresh set of candidates so the night keeps moving.
+ *
+ * `difficulty` (see engine/difficulty.js) tightens per-delivery time limits and biases
+ * drop-offs to be farther away as the run progresses — two of the night-over-night
+ * difficulty knobs, alongside traffic/obstacle counts and event frequency.
  */
 export class DeliverySystem {
-  constructor(city, rng, interactRadius) {
+  constructor(city, rng, interactRadius, difficulty = {}) {
     this.city = city;
     this.rng = rng;
     this.interactRadius = interactRadius;
-    this.phase = 'toPickup'; // 'toPickup' | 'toDropoff'
+    this.timeMultiplier = difficulty.deliveryTimeMultiplier ?? 1;
+    this.minRouteDistance = (difficulty.routeDistanceBias ?? 0) * WORLD_DIAGONAL;
+    this.phase = 'toPickup'; // 'selecting' | 'toPickup' | 'toDropoff'
     this.order = null;
+    this.candidates = [];
+    this.selectionTimer = 0;
     this._lastBuildingId = null;
-    this._queueOrder();
+    this._queueCandidates();
   }
 
   setInteractRadius(radius) {
@@ -79,22 +92,37 @@ export class DeliverySystem {
     return { x, y, buildingId: building.id, district: building.district };
   }
 
-  _queueOrder() {
-    const pickupSpot = this._randomSpot(this._lastBuildingId);
-    const dropoffSpot = this._randomSpot(pickupSpot.buildingId, pickupSpot.district);
+  /** Rolls one complete candidate job (pickup + drop-off + pay/time terms) without touching
+   * `this.order` — the caller decides whether/when it becomes the active job. */
+  _generateOrder(excludeBuildingId) {
+    const pickupSpot = this._randomSpot(excludeBuildingId);
     const pickup = new DeliveryPoint('pickup', pickupSpot.x, pickupSpot.y);
+
+    // At higher difficulty, re-roll a too-close drop-off a few times to bias toward longer hauls.
+    let dropoffSpot;
+    let distance;
+    let attempts = 0;
+    do {
+      dropoffSpot = this._randomSpot(pickupSpot.buildingId, pickupSpot.district);
+      distance = dist(pickup.x, pickup.y, dropoffSpot.x, dropoffSpot.y);
+      attempts++;
+    } while (distance < this.minRouteDistance && attempts < 6);
+
     const dropoff = new DeliveryPoint('dropoff', dropoffSpot.x, dropoffSpot.y);
     const type = pickDeliveryType(this.rng);
-    const distance = dist(pickup.x, pickup.y, dropoff.x, dropoff.y);
     const distancePay = distance * type.payPerDistance;
     const potentialPay = Math.round((type.basePay + distancePay) * type.riskMultiplier);
-    const timeLimit = Math.round(type.timeBuffer + distance * type.timeFactor);
+    const timeLimit = Math.max(
+      MIN_TIME_LIMIT,
+      Math.round((type.timeBuffer + distance * type.timeFactor) * this.timeMultiplier)
+    );
 
-    this._lastBuildingId = dropoffSpot.buildingId;
-    this.order = {
+    return {
       type,
       pickup,
       dropoff,
+      pickupBuildingId: pickupSpot.buildingId,
+      dropoffBuildingId: dropoffSpot.buildingId,
       distance,
       basePay: type.basePay,
       distancePay,
@@ -102,11 +130,39 @@ export class DeliverySystem {
       timeLimit,
       timeRemaining: timeLimit,
     };
+  }
+
+  /** Rolls a fresh batch of candidate jobs and opens the selection window. */
+  _queueCandidates() {
+    this.candidates = Array.from({ length: CANDIDATE_COUNT }, () => this._generateOrder(this._lastBuildingId));
+    this.order = null;
+    this.phase = 'selecting';
+    this.selectionTimer = 0;
+  }
+
+  /** Commits to one of the currently offered candidates (called directly by the engine in
+   * response to a player click, not through the per-frame `update()` return value). */
+  selectCandidate(index) {
+    const chosen = this.candidates[index];
+    if (!chosen) return;
+    this.order = chosen;
+    this.candidates = [];
+    this._lastBuildingId = chosen.dropoffBuildingId;
     this.phase = 'toPickup';
   }
 
   /** Advances markers, per-delivery timer and arrival checks. Returns an event or null. */
   update(dt, player, interactPressed) {
+    if (this.phase === 'selecting') {
+      this.selectionTimer += dt;
+      if (this.selectionTimer >= AUTO_SELECT_TIMEOUT) {
+        const order = this.candidates[0];
+        this.selectCandidate(0);
+        return { type: 'autoSelected', order };
+      }
+      return null;
+    }
+
     const order = this.order;
     order.pickup.update(dt);
     order.dropoff.update(dt);
@@ -124,7 +180,7 @@ export class DeliverySystem {
     order.timeRemaining -= dt;
     if (order.timeRemaining <= 0) {
       const failedOrder = order;
-      this._queueOrder();
+      this._queueCandidates();
       return { type: 'failed', order: failedOrder };
     }
 
@@ -134,13 +190,14 @@ export class DeliverySystem {
       const timeBonus = (order.basePay + order.distancePay) * timeFraction * 0.5;
       const subtotal = Math.round((order.basePay + order.distancePay + timeBonus) * order.type.riskMultiplier);
       const completedOrder = order;
-      this._queueOrder();
+      this._queueCandidates();
       return { type: 'delivered', order: completedOrder, subtotal, timeFraction };
     }
     return null;
   }
 
   get activeMarker() {
+    if (!this.order) return null;
     return this.phase === 'toPickup' ? this.order.pickup : this.order.dropoff;
   }
 }

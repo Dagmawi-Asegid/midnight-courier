@@ -1,19 +1,25 @@
 import { formatMoney } from '../game/utils/math.js';
 
-export default function MainMenu({ onStart, totalMoney, night }) {
+export default function MainMenu({ onStart, onOpenSettings, totalMoney, night }) {
   const hasProgress = totalMoney > 0 || night > 1;
 
   return (
     <div className="screen menu-screen">
       <div className="menu-glow" />
+      <div className="menu-scanlines" />
       <h1 className="menu-title">
         MIDNIGHT <span>COURIER</span>
       </h1>
       <p className="menu-subtitle">Deliver the city's secrets before sunrise.</p>
 
-      <button className="btn btn-primary" onClick={onStart}>
-        Start Shift
-      </button>
+      <div className="menu-actions">
+        <button className="btn btn-primary" onClick={onStart}>
+          Start Shift
+        </button>
+        <button className="btn btn-ghost" onClick={onOpenSettings}>
+          Settings
+        </button>
+      </div>
 
       {hasProgress && (
         <p className="menu-progress-hint">

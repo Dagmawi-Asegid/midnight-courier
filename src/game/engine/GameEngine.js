@@ -1,6 +1,7 @@
 import { Camera } from './Camera.js';
 import { InputManager } from './InputManager.js';
 import { AMBIENT_PEDESTRIAN_MAX, CELL_SIZE, DISTRICTS, NIGHT_BASE_DURATION } from './constants.js';
+import { getDifficulty } from './difficulty.js';
 import { Player } from '../entities/Player.js';
 import { AmbientPedestrian } from '../entities/AmbientPedestrian.js';
 import { City } from '../world/City.js';
@@ -13,17 +14,33 @@ import {
   drawObstacles,
   drawPedestrians,
   drawPlayer,
+  drawTimePickups,
 } from '../world/EntityRenderer.js';
-import { DeliverySystem } from '../systems/DeliverySystem.js';
+import { AUTO_SELECT_TIMEOUT, DeliverySystem } from '../systems/DeliverySystem.js';
 import { ComboSystem } from '../systems/ComboSystem.js';
 import { EventSystem } from '../systems/EventSystem.js';
 import { EffectsSystem } from '../systems/EffectsSystem.js';
 import { resolvePlayerCollisions } from '../systems/CollisionSystem.js';
-import { spawnObstacles, spawnTraffic } from '../systems/TrafficSystem.js';
+import { spawnObstacles, spawnTimePickups, spawnTraffic } from '../systems/TrafficSystem.js';
+import { SkidTrailSystem } from '../systems/SkidTrailSystem.js';
 import { createRng } from '../utils/random.js';
-import { dist } from '../utils/math.js';
+import { clamp, dist } from '../utils/math.js';
+import {
+  playBoostSound,
+  playImpactSound,
+  playNearMissSound,
+  playSkidSound,
+  playTimeBonusSound,
+} from '../utils/sound.js';
+import { TIME_PICKUP_SECONDS } from '../entities/TimePickup.js';
 
 const HUD_UPDATE_INTERVAL = 0.08;
+const NEAR_MISS_BAND = 24; // px beyond the actual collision radius that counts as "close"
+const NEAR_MISS_MIN_SPEED = 60; // px/s — only credit a near miss if the player was actually moving
+const BOOST_ZOOM = 1.045; // subtle push-in while boosting — noticeable without disorienting
+const ZOOM_LERP = 6; // per-second closing rate toward the target zoom
+const SKID_SOUND_COOLDOWN = 0.35; // don't retrigger the screech every single drifting frame
+const IMPACT_SOUND_THRESHOLD = 0.12; // ignore near-zero grazes so only real hits make noise
 
 /**
  * Owns the full simulation for a single night: world, player, traffic,
@@ -31,34 +48,57 @@ const HUD_UPDATE_INTERVAL = 0.08;
  * it through the constructor config and the callbacks it invokes.
  */
 export class GameEngine {
-  constructor(canvas, { citySeed, nightSeed, stats, nightDuration, onHudUpdate, onNightEnd, onEvent }) {
+  constructor(
+    canvas,
+    { citySeed, nightSeed, stats, nightDuration, difficulty, settings, onHudUpdate, onNightEnd, onEvent }
+  ) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.onHudUpdate = onHudUpdate;
     this.onNightEnd = onNightEnd;
     this.onEvent = onEvent;
+    this.difficulty = difficulty ?? getDifficulty(1);
+
+    // Player preferences (graphics/accessibility/camera feel) — applied once at construction.
+    // Settings changed mid-night take effect on the next night/restart, except camera
+    // sensitivity which GameCanvas pushes live onto `this.camera.sensitivity`.
+    const graphics = settings?.graphics ?? {};
+    const accessibility = settings?.accessibility ?? {};
+    this.effectsEnabled = graphics.effects ?? true;
+    this.shadowsEnabled = graphics.shadows ?? true;
+    this.reducedShakeFactor = accessibility.reducedShake ? 0.2 : 1;
+    const qualityDensity = { low: 0.5, medium: 0.75, high: 1 }[graphics.quality] ?? 1;
 
     this.city = new City(citySeed);
     this.rng = createRng(nightSeed);
     const spawn = this._findSpawnPoint();
     this.player = new Player(spawn.x, spawn.y, stats);
-    this.deliverySystem = new DeliverySystem(this.city, this.rng, stats.interactRadius);
+    this.deliverySystem = new DeliverySystem(this.city, this.rng, stats.interactRadius, this.difficulty);
     this.combo = new ComboSystem(stats.comboPerStackBonus);
-    this.events = new EventSystem(this.city, this.rng);
+    this.events = new EventSystem(this.city, this.rng, this.difficulty);
     this.effects = new EffectsSystem();
-    this.npcVehicles = spawnTraffic(this.city, this.rng, 14);
-    this.obstacles = spawnObstacles(this.city, this.rng, 16).concat(this.city.parkedVehicles);
-    this.ambientPedestrians = this._spawnAmbientPedestrians();
+    this.npcVehicles = spawnTraffic(this.city, this.rng, this.difficulty.trafficCount);
+    this.obstacles = spawnObstacles(this.city, this.rng, this.difficulty.obstacleCount).concat(this.city.parkedVehicles);
+    this.timePickups = spawnTimePickups(this.city, this.rng, this.difficulty.timePickupCount);
+    this.ambientPedestrians = this._spawnAmbientPedestrians(qualityDensity);
+    this.skidTrail = new SkidTrailSystem();
     this.camera = new Camera(this.city.width, this.city.height);
+    this.camera.sensitivity = settings?.gameplay?.cameraSensitivity ?? 1;
     this.input = new InputManager(window);
 
     this.timeRemaining = nightDuration ?? NIGHT_BASE_DURATION;
     this.money = 0;
     this.deliveriesCompleted = 0;
+    this.deliveriesFailed = 0;
+    this.bestCombo = 0;
+    this.distanceTraveled = 0;
     this.running = false;
+    this.paused = false;
     this.time = 0;
     this._hudAccumulator = 0;
     this._shakeMag = 0;
+    this._wasBoosting = false;
+    this._skidCooldown = 0;
     this._rafId = null;
     this._lastTs = null;
 
@@ -74,19 +114,21 @@ export class GameEngine {
     return { x: midCol, y: midRow };
   }
 
-  /** Instantiates decorative crowd pedestrians from the city's anchor points, capped for performance. */
-  _spawnAmbientPedestrians() {
+  /** Instantiates decorative crowd pedestrians from the city's anchor points, capped for
+   * performance — the cap itself shrinks further under a lower Graphics Quality setting. */
+  _spawnAmbientPedestrians(densityScale = 1) {
     const anchors = this.city.ambientAnchors;
+    const cap = Math.round(AMBIENT_PEDESTRIAN_MAX * densityScale);
     let chosen = anchors;
-    if (anchors.length > AMBIENT_PEDESTRIAN_MAX) {
+    if (anchors.length > cap) {
       const indices = anchors.map((_, i) => i);
       for (let i = indices.length - 1; i > 0; i--) {
         const j = Math.floor(this.rng() * (i + 1));
         [indices[i], indices[j]] = [indices[j], indices[i]];
       }
-      chosen = indices.slice(0, AMBIENT_PEDESTRIAN_MAX).map((i) => anchors[i]);
+      chosen = indices.slice(0, cap).map((i) => anchors[i]);
     }
-    return chosen.map((a) => new AmbientPedestrian(a.x, a.y, this.rng, DISTRICTS[a.district]?.pedestrianPalette));
+    return chosen.map((a) => new AmbientPedestrian(a.x, a.y, this.rng, DISTRICTS[a.district]?.pedestrianPalette, a.axis));
   }
 
   /** Which district the player is currently standing in — also where a future audio manager
@@ -115,9 +157,24 @@ export class GameEngine {
     window.removeEventListener('resize', this._resize);
   }
 
-  /** Nudges the camera with a brief decaying shake for high-impact moments. */
+  /** Nudges the camera with a brief decaying shake for high-impact moments. Scaled down (not
+   * eliminated) by the Reduced Screen Shake accessibility setting, so impacts still register. */
   triggerShake(magnitude) {
-    this._shakeMag = Math.max(this._shakeMag, magnitude);
+    this._shakeMag = Math.max(this._shakeMag, magnitude * this.reducedShakeFactor);
+  }
+
+  /** Freezes simulation (timer, physics, AI) while still rendering the last frame — the pause
+   * menu overlays on top rather than the screen going blank. */
+  pause() {
+    this.paused = true;
+  }
+
+  /** Resumes simulation. Resetting `_lastTs` here (rather than letting the next `_loop` tick
+   * compute a huge elapsed-since-pause dt) is what keeps the game from "catching up" with a
+   * lurch — the frame right after resuming behaves like any other frame. */
+  resume() {
+    this.paused = false;
+    this._lastTs = performance.now();
   }
 
   _resize() {
@@ -137,12 +194,14 @@ export class GameEngine {
     if (!this.running) return;
     const dt = Math.min(0.05, (ts - this._lastTs) / 1000);
     this._lastTs = ts;
-    this.time += dt;
 
-    this._update(dt);
+    if (!this.paused) {
+      this.time += dt;
+      this._update(dt);
+    }
     this._draw();
 
-    if (this.timeRemaining <= 0) {
+    if (!this.paused && this.timeRemaining <= 0) {
       this._endNight();
       return;
     }
@@ -150,14 +209,56 @@ export class GameEngine {
   }
 
   _update(dt) {
+    const prevX = this.player.x;
+    const prevY = this.player.y;
+
     this.timeRemaining = Math.max(0, this.timeRemaining - dt);
     this.combo.update(dt);
     this._shakeMag = Math.max(0, this._shakeMag - dt * 50);
 
     this.player.update(dt, this.input.state);
-    for (const v of this.npcVehicles) v.update(dt);
+
+    if (this.player.isBoosting && !this._wasBoosting) playBoostSound();
+    this._wasBoosting = this.player.isBoosting;
+    const targetZoom = this.player.isBoosting ? BOOST_ZOOM : 1;
+    this.camera.zoom += (targetZoom - this.camera.zoom) * clamp(ZOOM_LERP * dt, 0, 1);
+
+    if (this.player.isDrifting) {
+      if (this.effectsEnabled) {
+        const perpX = -Math.sin(this.player.heading) * 4;
+        const perpY = Math.cos(this.player.heading) * 4;
+        this.skidTrail.addMark(prevX + perpX, prevY + perpY, this.player.x + perpX, this.player.y + perpY);
+        this.skidTrail.addMark(prevX - perpX, prevY - perpY, this.player.x - perpX, this.player.y - perpY);
+      }
+      if (this._skidCooldown <= 0) {
+        playSkidSound();
+        this._skidCooldown = SKID_SOUND_COOLDOWN;
+      }
+    }
+    this._skidCooldown = Math.max(0, this._skidCooldown - dt);
+    if (this.effectsEnabled) this.skidTrail.update(dt);
+
+    // Shared per-frame context so every vehicle's lightweight AI (stop for red lights, don't
+    // rear-end the car ahead) can see the same world without each one re-deriving it.
+    const vehicleContext = {
+      city: this.city,
+      time: this.time,
+      vehicleLists: [this.npcVehicles, this.events.vehicles],
+    };
+    for (const v of this.npcVehicles) v.update(dt, vehicleContext);
+    for (const v of this.events.vehicles) v.update(dt, vehicleContext);
     for (const p of this.ambientPedestrians) p.update(dt);
     resolvePlayerCollisions(this.player, this.city, this.obstacles, this.npcVehicles, this.events.obstacles, this.events.vehicles);
+
+    const impact = this.player.consumeImpact();
+    if (impact > IMPACT_SOUND_THRESHOLD) {
+      playImpactSound(impact);
+      this.triggerShake(2 + impact * 10);
+    }
+    this._updateNearMisses();
+    this._updateTimePickups();
+
+    this.distanceTraveled += dist(prevX, prevY, this.player.x, this.player.y);
 
     this._updateWorldEvents(dt);
     this._updateDelivery(dt);
@@ -169,6 +270,52 @@ export class GameEngine {
     if (this._hudAccumulator >= HUD_UPDATE_INTERVAL) {
       this._hudAccumulator = 0;
       this._pushHud(false);
+    }
+  }
+
+  /** Rewards close, skillful dodges: if the player grazes just outside a vehicle's collision
+   * radius without hitting it, that vehicle gets a one-shot "close call" cue. A per-vehicle
+   * armed flag means it only fires once per approach — lingering in the band doesn't spam it,
+   * and driving away and back in lets it trigger again. */
+  _updateNearMisses() {
+    if (Math.abs(this.player.speed) < NEAR_MISS_MIN_SPEED) return;
+    const lists = [this.npcVehicles, this.events.vehicles];
+    for (const list of lists) {
+      for (const v of list) {
+        const collideThreshold = this.player.stats.radius + v.radius;
+        const closeThreshold = collideThreshold + NEAR_MISS_BAND;
+        const d = dist(this.player.x, this.player.y, v.x, v.y);
+        if (d >= closeThreshold) {
+          v._nearMissArmed = true;
+        } else if (d >= collideThreshold && v._nearMissArmed) {
+          v._nearMissArmed = false;
+          this._triggerNearMiss();
+        }
+      }
+    }
+  }
+
+  _triggerNearMiss() {
+    this.effects.spawnText(this.player.x, this.player.y - 24, 'CLOSE CALL', '#7dfcff');
+    this.triggerShake(3);
+    playNearMissSound();
+    this.onEvent?.({ type: 'nearMiss' });
+  }
+
+  /** Cheap proximity check against the night's scattered time-refill pickups — a handful of
+   * static points, so a plain per-frame loop is fine (same cost class as near-miss checks). */
+  _updateTimePickups() {
+    for (const p of this.timePickups) {
+      if (p.collected) continue;
+      const d = dist(this.player.x, this.player.y, p.x, p.y);
+      if (d <= this.player.stats.radius + p.radius) {
+        p.collected = true;
+        this.timeRemaining += TIME_PICKUP_SECONDS;
+        this.effects.spawnText(p.x, p.y - 18, `+${TIME_PICKUP_SECONDS}s`, '#7dff5c');
+        this.effects.spawnRing(p.x, p.y, '#7dff5c');
+        playTimeBonusSound();
+        this.onEvent?.({ type: 'timeBonus', seconds: TIME_PICKUP_SECONDS });
+      }
     }
   }
 
@@ -215,6 +362,7 @@ export class GameEngine {
       const reward = Math.round(event.subtotal * comboMultiplier * rewardMultiplier);
       this.money += reward;
       this.deliveriesCompleted += 1;
+      this.bestCombo = Math.max(this.bestCombo, this.combo.count);
       this.effects.spawnRing(event.order.dropoff.x, event.order.dropoff.y, event.order.type.color);
       this.effects.spawnText(event.order.dropoff.x, event.order.dropoff.y - 20, `+$${reward}`, '#9dffb0');
       if (this.combo.count > 1) {
@@ -228,11 +376,19 @@ export class GameEngine {
         comboCount: this.combo.count,
       });
     } else if (event.type === 'failed') {
+      this.deliveriesFailed += 1;
       this.combo.registerFailure();
       this.triggerShake(6);
       this.effects.spawnText(event.order.dropoff.x, event.order.dropoff.y - 20, 'MISSED', '#ff6a6a');
       this.onEvent?.({ type: 'missed', order: event.order, potential: event.order.potentialPay });
+    } else if (event.type === 'autoSelected') {
+      this.onEvent?.({ type: 'autoSelected', order: event.order });
     }
+  }
+
+  /** Called by the UI when the player picks a job from the delivery-selection panel. */
+  selectDelivery(index) {
+    this.deliverySystem.selectCandidate(index);
   }
 
   _districtLabelAt(point) {
@@ -281,13 +437,28 @@ export class GameEngine {
     };
   }
 
+  /** Compact per-candidate summary for the delivery-selection panel — just what's needed to
+   * weigh one job against another, not the full pickup/dropoff point objects. */
+  _candidateSummaries() {
+    return this.deliverySystem.candidates.map((c) => ({
+      type: c.type,
+      potentialPay: c.potentialPay,
+      timeLimit: c.timeLimit,
+      distanceMeters: Math.round(c.distance / 8),
+      pickupDistrict: this._districtLabelAt(c.pickup),
+      dropoffDistrict: this._districtLabelAt(c.dropoff),
+    }));
+  }
+
   _pushHud(force) {
     if (!this.onHudUpdate) return;
     const order = this.deliverySystem.order;
+    const nav = this._computeNav();
     this.onHudUpdate({
       timeRemaining: this.timeRemaining,
       money: this.money,
       deliveriesCompleted: this.deliveriesCompleted,
+      speed: Math.round(Math.abs(this.player.speed)),
       phase: this.deliverySystem.phase,
       carrying: !!this.player.carrying,
       order: order && {
@@ -296,13 +467,22 @@ export class GameEngine {
         timeLimit: order.timeLimit,
         timeRemaining: order.timeRemaining,
       },
-      nav: this._computeNav(),
+      candidates: this.deliverySystem.phase === 'selecting' ? this._candidateSummaries() : null,
+      selectionProgress: clamp(this.deliverySystem.selectionTimer / AUTO_SELECT_TIMEOUT, 0, 1),
+      nav,
       navPrecision: this.player.stats.navPrecision || 0,
       mapInfoLevel: this.player.stats.mapInfoLevel || 0,
       shortcutPing: this._computeShortcutPing(),
       combo: { count: this.combo.count, multiplier: this.combo.multiplier },
       boost: { meter: this.player.boostMeter, isBoosting: this.player.isBoosting },
       district: this._currentDistrict(),
+      minimap: {
+        playerX: this.player.x,
+        playerY: this.player.y,
+        heading: this.player.heading,
+        dest: nav && order ? { x: nav.kind === 'pickup' ? order.pickup.x : order.dropoff.x, y: nav.kind === 'pickup' ? order.pickup.y : order.dropoff.y, color: order.type.color } : null,
+        shortcut: this.events.shortcut && !this.events.shortcut.collected ? this.events.shortcut : null,
+      },
       force,
     });
   }
@@ -312,6 +492,9 @@ export class GameEngine {
     this.onNightEnd?.({
       money: this.money,
       deliveriesCompleted: this.deliveriesCompleted,
+      deliveriesFailed: this.deliveriesFailed,
+      bestCombo: this.bestCombo,
+      distanceTraveled: this.distanceTraveled,
     });
   }
 
@@ -322,22 +505,29 @@ export class GameEngine {
     ctx.fillRect(0, 0, this.camera.viewWidth, this.camera.viewHeight);
     const shakeX = this._shakeMag > 0.05 ? (Math.random() - 0.5) * this._shakeMag : 0;
     const shakeY = this._shakeMag > 0.05 ? (Math.random() - 0.5) * this._shakeMag : 0;
+    if (this.camera.zoom !== 1) {
+      ctx.translate(this.camera.viewWidth / 2, this.camera.viewHeight / 2);
+      ctx.scale(this.camera.zoom, this.camera.zoom);
+      ctx.translate(-this.camera.viewWidth / 2, -this.camera.viewHeight / 2);
+    }
     ctx.translate(Math.round(-this.camera.x + shakeX), Math.round(-this.camera.y + shakeY));
 
     drawCity(ctx, this.city, this.camera, this.time);
+    if (this.effectsEnabled) this.skidTrail.draw(ctx);
+    drawTimePickups(ctx, this.timePickups, this.camera, this.time);
     drawDeliveryMarker(ctx, this.deliverySystem, this.time);
     drawEventZones(ctx, this.events, this.time);
     drawAmbientPedestrians(ctx, this.ambientPedestrians, this.camera);
     drawObstacles(ctx, this.obstacles, this.camera);
     drawObstacles(ctx, this.events.obstacles, this.camera);
     drawPedestrians(ctx, this.events.pedestrians, this.camera);
-    drawNPCVehicles(ctx, this.npcVehicles, this.camera);
-    drawNPCVehicles(ctx, this.events.vehicles, this.camera);
-    drawPlayer(ctx, this.player);
+    drawNPCVehicles(ctx, this.npcVehicles, this.camera, this.time);
+    drawNPCVehicles(ctx, this.events.vehicles, this.camera, this.time);
+    drawPlayer(ctx, this.player, this.effectsEnabled);
     this.effects.draw(ctx);
 
     ctx.restore();
-    this._drawVignette();
+    if (this.shadowsEnabled) this._drawVignette();
   }
 
   _drawVignette() {

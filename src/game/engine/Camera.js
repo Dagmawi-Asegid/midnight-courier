@@ -9,6 +9,8 @@ export class Camera {
     this.viewHeight = 0;
     this.worldWidth = worldWidth;
     this.worldHeight = worldHeight;
+    this.zoom = 1; // lerped in by GameEngine for subtle boost feedback
+    this.sensitivity = 1; // player preference: how snappily the camera catches up to the bike
   }
 
   resize(viewWidth, viewHeight) {
@@ -19,7 +21,7 @@ export class Camera {
   follow(targetX, targetY, dt) {
     const desiredX = targetX - this.viewWidth / 2;
     const desiredY = targetY - this.viewHeight / 2;
-    const smoothing = 1 - Math.pow(0.001, dt);
+    const smoothing = 1 - Math.pow(0.001, dt * this.sensitivity);
     this.x = lerp(this.x, desiredX, smoothing);
     this.y = lerp(this.y, desiredY, smoothing);
 

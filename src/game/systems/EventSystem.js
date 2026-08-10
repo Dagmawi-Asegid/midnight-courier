@@ -23,18 +23,25 @@ function pickEventDef(rng) {
  * or jaywalking pedestrians — and cleans it up when its duration elapses.
  * Keeping only one event live at once keeps this cheap and easy to reason
  * about; the rest of the sim just merges its entity lists in for a frame.
+ * `difficulty.eventIntervalMultiplier` shrinks the gap between events as the run
+ * progresses (see engine/difficulty.js), so later nights feel busier and less calm.
  */
 export class EventSystem {
-  constructor(city, rng) {
+  constructor(city, rng, difficulty = {}) {
     this.city = city;
     this.rng = rng;
     this.current = null;
-    this.spawnTimer = range(rng, EVENT_SPAWN_INTERVAL[0], EVENT_SPAWN_INTERVAL[1]);
+    this.intervalMultiplier = difficulty.eventIntervalMultiplier ?? 1;
+    this.spawnTimer = this._rollSpawnTimer();
     this.obstacles = [];
     this.vehicles = [];
     this.pedestrians = [];
     this.shortcut = null;
     this.checkpoint = null;
+  }
+
+  _rollSpawnTimer() {
+    return range(this.rng, EVENT_SPAWN_INTERVAL[0], EVENT_SPAWN_INTERVAL[1]) * this.intervalMultiplier;
   }
 
   /** Finds a road intersection near the player so spawns are guaranteed drivable. */
@@ -97,9 +104,10 @@ export class EventSystem {
       case 'pedestrian': {
         const p = this._nearIntersection(player, 450);
         const crossesHorizontalRoad = this.rng() < 0.5;
+        // Slight per-pedestrian pace variance so a pair crossing together doesn't move in lockstep.
         this.pedestrians.push(
-          new Pedestrian(p.x, p.y, crossesHorizontalRoad, 0),
-          new Pedestrian(p.x, p.y, crossesHorizontalRoad, 1)
+          new Pedestrian(p.x, p.y, crossesHorizontalRoad, 0, 0.85 + this.rng() * 0.3),
+          new Pedestrian(p.x, p.y, crossesHorizontalRoad, 1, 0.85 + this.rng() * 0.3)
         );
         break;
       }
@@ -159,7 +167,7 @@ export class EventSystem {
       if (ev.elapsed >= ev.duration || doneEarly) {
         notifications.push({ kind: 'ended', def: ev.def });
         this._clearEvent();
-        this.spawnTimer = range(this.rng, EVENT_SPAWN_INTERVAL[0], EVENT_SPAWN_INTERVAL[1]);
+        this.spawnTimer = this._rollSpawnTimer();
       }
     } else {
       this.spawnTimer -= dt;

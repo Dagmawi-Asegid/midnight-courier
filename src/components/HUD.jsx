@@ -1,4 +1,13 @@
 import { formatMoney, formatTime } from '../game/utils/math.js';
+import Minimap from './Minimap.jsx';
+
+/** Distance-based color: cyan far away, warming to green as the player closes in — a baseline
+ * proximity cue every player gets, layered underneath the upgrade-gated exact readout. */
+function proximityColor(meters) {
+  if (meters < 60) return '#7dff5c';
+  if (meters < 160) return '#c8ff9d';
+  return '#2fe8ff';
+}
 
 function NavCompass({ nav, precision }) {
   if (!nav) return null;
@@ -8,9 +17,10 @@ function NavCompass({ nav, precision }) {
   const meters = precision >= 1 ? Math.round(rawMeters) : Math.round(rawMeters / 25) * 25;
   const label = nav.kind === 'pickup' ? 'PICKUP' : 'DROP-OFF';
   const close = precision >= 2 && rawMeters < 50;
+  const color = proximityColor(rawMeters);
 
   return (
-    <div className={`nav-compass ${close ? 'nav-compass--close' : ''}`}>
+    <div className={`nav-compass ${close ? 'nav-compass--close' : ''}`} style={{ '--nav-color': color }}>
       <div className="nav-dial">
         <div className="nav-arrow" style={{ transform: `rotate(${deg}deg)` }} />
       </div>
@@ -68,6 +78,33 @@ function OrderPanel({ order, phase, nav, mapInfoLevel }) {
   );
 }
 
+/** Up to three candidate jobs offered together so the player can weigh pay vs. distance vs.
+ * risk before committing — picking one is a click, but ignoring it entirely is also fine: the
+ * thin progress bar shows how long until the game auto-picks the first one for you. */
+function DeliverySelectionPanel({ candidates, selectionProgress, onSelect }) {
+  if (!candidates || candidates.length === 0) return null;
+  return (
+    <div className="selection-panel">
+      <p className="selection-title">Choose your next job</p>
+      <div className="selection-cards">
+        {candidates.map((c, i) => (
+          <button key={i} className="selection-card" style={{ '--order-color': c.type.color }} onClick={() => onSelect(i)}>
+            <span className="selection-card-icon">{c.type.icon}</span>
+            <span className="selection-card-label">{c.type.label}</span>
+            <span className="selection-card-pay">${c.potentialPay}</span>
+            <span className="selection-card-meta">
+              {c.distanceMeters}m · {c.pickupDistrict} → {c.dropoffDistrict}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="selection-timeout-track">
+        <div className="selection-timeout-fill" style={{ width: `${selectionProgress * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function DistrictBadge({ district }) {
   if (!district) return null;
   return (
@@ -88,6 +125,15 @@ function ComboBadge({ combo }) {
   );
 }
 
+function SpeedGauge({ speed }) {
+  return (
+    <div className="speed-gauge">
+      <span className="speed-value">{speed}</span>
+      <span className="speed-unit">SPD</span>
+    </div>
+  );
+}
+
 function BoostMeter({ boost }) {
   if (!boost) return null;
   return (
@@ -100,10 +146,14 @@ function BoostMeter({ boost }) {
   );
 }
 
-export default function HUD({ hud, nightDuration, night }) {
+export default function HUD({ hud, nightDuration, night, city, onPause, onSelectDelivery }) {
   const urgent = hud.timeRemaining < 15;
   const promptText =
-    hud.phase === 'toPickup' ? 'Ride to the pickup — SPACE to accept' : 'Get to the drop-off before time runs out!';
+    hud.phase === 'selecting'
+      ? 'Pick your next delivery'
+      : hud.phase === 'toPickup'
+        ? 'Ride to the pickup — SPACE to accept'
+        : 'Get to the drop-off before time runs out!';
 
   return (
     <div className="hud">
@@ -127,15 +177,28 @@ export default function HUD({ hud, nightDuration, night }) {
         <ComboBadge combo={hud.combo} />
       </div>
 
+      <button className="btn-icon hud-pause-btn" onClick={onPause} aria-label="Pause" title="Pause (Esc)">
+        ⏸
+      </button>
+
       <OrderPanel order={hud.order} phase={hud.phase} nav={hud.nav} mapInfoLevel={hud.mapInfoLevel} />
       <DistrictBadge district={hud.district} />
       <NavCompass nav={hud.nav} precision={hud.navPrecision} />
-      <BoostMeter boost={hud.boost} />
-      <ShortcutPing ping={hud.shortcutPing} />
+      <DeliverySelectionPanel candidates={hud.candidates} selectionProgress={hud.selectionProgress} onSelect={onSelectDelivery} />
+
+      <div className="hud-bottom-left">
+        <BoostMeter boost={hud.boost} />
+        <SpeedGauge speed={hud.speed} />
+      </div>
+
+      <div className="hud-bottom-right">
+        <ShortcutPing ping={hud.shortcutPing} />
+        <Minimap city={city} minimap={hud.minimap} />
+      </div>
 
       <div className="hud-bottom">
         <div className={`hud-prompt ${hud.carrying ? 'hud-prompt--carrying' : ''}`}>{promptText}</div>
-        <div className="hud-controls">WASD / Arrows to ride · SHIFT to boost · SPACE or E to accept</div>
+        <div className="hud-controls">WASD / Arrows to ride · SHIFT to boost · SPACE or E to accept · ESC to pause</div>
       </div>
 
       <div className="hud-bar-track">
