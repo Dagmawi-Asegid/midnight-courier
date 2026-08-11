@@ -244,6 +244,11 @@ export function upgradeCost(def, currentLevel, costMultiplier = 1) {
 
 // ---------- delivery gameplay tuning ----------
 
+// `timeFactor`/`timeBuffer` are budgeted off the pickup->dropoff STRAIGHT-LINE distance, but the
+// player can only ever travel along the road grid — real driving distance is routinely 1.3-1.6x
+// that beeline once you account for the grid layout, turns, traffic lights and just not knowing
+// the map yet. These values already bake in that gap (they're deliberately generous relative to
+// the raw straight-line pace they imply) so the *actual* drive comes with real breathing room.
 export const DELIVERY_TYPES = {
   normal: {
     id: 'normal',
@@ -253,8 +258,8 @@ export const DELIVERY_TYPES = {
     basePay: 18,
     payPerDistance: 0.05,
     riskMultiplier: 1,
-    timeFactor: 0.014, // seconds of time limit per pixel of distance (~70px/s asymptotic pace — very reachable on a stock bike)
-    timeBuffer: 10, // flat seconds added so short hops are still comfortably makeable
+    timeFactor: 0.02, // ~50px/s straight-line pace — comfortable even after the road-grid detour tax
+    timeBuffer: 12, // flat seconds added so short hops are still comfortably makeable
     color: '#7dff5c',
   },
   rush: {
@@ -265,8 +270,8 @@ export const DELIVERY_TYPES = {
     basePay: 25,
     payPerDistance: 0.055,
     riskMultiplier: 1.15,
-    timeFactor: 0.011, // tighter than normal, but still a moderate pace, not a top-speed sprint
-    timeBuffer: 8,
+    timeFactor: 0.0154, // tighter than normal, but still a moderate pace, not a top-speed sprint
+    timeBuffer: 10,
     color: '#2fe8ff',
   },
   danger: {
@@ -277,8 +282,8 @@ export const DELIVERY_TYPES = {
     basePay: 33,
     payPerDistance: 0.065,
     riskMultiplier: 1.5,
-    timeFactor: 0.012,
-    timeBuffer: 9,
+    timeFactor: 0.0182,
+    timeBuffer: 11,
     color: '#ff2f6e',
   },
 };

@@ -19,8 +19,11 @@ const LEVEL_DURATION_STEP = 60; // seconds shaved off per level until the floor
 const CURVE = {
   traffic: { base: 14, max: 26 },
   obstacles: { base: 16, max: 30 },
-  deliveryTimeMultiplier: { base: 1, max: 0.85 },
-  routeDistanceBias: { base: 0, max: 0.35 },
+  // A gentle squeeze, not a cliff — by the last level, delivery windows are only 8% tighter than
+  // level 1's, so the late-game difficulty comes from traffic/obstacles/route length, not from
+  // the clock itself becoming unbeatable.
+  deliveryTimeMultiplier: { base: 1, max: 0.92 },
+  routeDistanceBias: { base: 0, max: 0.25 },
   eventIntervalMultiplier: { base: 1, max: 0.6 },
   upgradeCostMultiplier: { base: 1, max: 1.35 },
   // More, and bigger, time-refill pickups on later levels — a direct counterweight to shorter
