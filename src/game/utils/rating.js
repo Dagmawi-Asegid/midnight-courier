@@ -1,27 +1,19 @@
-// How much of the night's earnings the player keeps as an extra bonus, based on their rating.
-const BONUS_RATE_BY_RATING = { 1: 0.05, 2: 0.18, 3: 0.4 };
+// Extra cut of the night's earnings awarded for passing the level.
+const PASS_BONUS_RATE = 0.4;
 
 /**
- * 0-3 star rating. 0 means the level's delivery goal wasn't met — the level isn't passed, and
- * (see gameReducer's NIGHT_ENDED) the next level stays locked. Meeting the goal always earns at
- * least 1 star; 2-3 stars beyond that are based on the RATE of success (completed vs. failed
- * deliveries) and the best combo reached that night, not absolute totals — a careful, consistent
- * courier can always earn 3 stars once they clear the goal, even deep into a run.
+ * The delivery goal shown on the briefing screen is the one number that matters: hit it (or
+ * beat it) and the level is a full pass — 3 stars, the earnings bonus, and the next level
+ * unlocks (see gameReducer's NIGHT_ENDED). Miss it and it's 0 — no partial credit in between, so
+ * "did I pass?" always has one clear, unambiguous answer instead of depending on combo/efficiency
+ * extras the player was never told about. Deeper performance (no failures, no damage, big combos)
+ * is still recognized separately through achievements.
  */
-export function computeNightRating({ deliveriesCompleted, deliveriesFailed, bestCombo, deliveryGoal = 1 }) {
-  if (deliveriesCompleted < deliveryGoal) return 0;
-
-  const attempted = deliveriesCompleted + deliveriesFailed;
-  const successRate = attempted === 0 ? 1 : deliveriesCompleted / attempted;
-  const comboScore = Math.min(1, bestCombo / 6);
-  const score = successRate * 2 + comboScore;
-
-  if (score >= 2.3) return 3;
-  if (score >= 1.3) return 2;
-  return 1;
+export function computeNightRating({ deliveriesCompleted, deliveryGoal = 1 }) {
+  return deliveriesCompleted >= deliveryGoal ? 3 : 0;
 }
 
-/** Extra cash awarded on top of the night's raw earnings for a good rating. */
+/** Extra cash awarded on top of the night's raw earnings for passing the level. */
 export function computeNightBonus(money, rating) {
-  return Math.round(money * (BONUS_RATE_BY_RATING[rating] ?? 0));
+  return rating > 0 ? Math.round(money * PASS_BONUS_RATE) : 0;
 }

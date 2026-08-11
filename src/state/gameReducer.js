@@ -82,7 +82,7 @@ export function gameReducer(state, action) {
         tookDamage = false,
       } = action.payload;
       const deliveryGoal = getDifficulty(state.night).deliveryGoal;
-      const rating = computeNightRating({ deliveriesCompleted, deliveriesFailed, bestCombo, deliveryGoal });
+      const rating = computeNightRating({ deliveriesCompleted, deliveryGoal });
       const goalMet = rating > 0;
       const bonus = computeNightBonus(money, rating);
       const earned = money + bonus;

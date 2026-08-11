@@ -1,7 +1,7 @@
 import { formatMoney } from '../game/utils/math.js';
 import { ACHIEVEMENTS } from '../state/achievements.js';
 
-const RATING_LABELS = { 1: 'Rough Night', 2: 'Solid Shift', 3: 'Perfect Run' };
+const RATING_LABELS = { 3: 'Goal Achieved!' };
 
 function UnlockedAchievements({ ids }) {
   if (!ids || ids.length === 0) return null;
