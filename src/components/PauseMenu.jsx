@@ -4,7 +4,7 @@ import SettingsScreen from './SettingsScreen.jsx';
 /** Pause overlay rendered on top of the still-visible (frozen) gameplay canvas. Settings opens
  * as an internal view swap rather than a separate route, so "Back" naturally returns to the
  * pause menu instead of unpausing outright. */
-export default function PauseMenu({ settings, onSettingsChange, onResume, onRestart, onQuitToMenu }) {
+export default function PauseMenu({ settings, onSettingsChange, onResume, onRestart, onQuitToMenu, onPhotoMode }) {
   const [view, setView] = useState('menu');
 
   return (
@@ -18,8 +18,11 @@ export default function PauseMenu({ settings, onSettingsChange, onResume, onRest
               <button className="btn btn-primary" onClick={onResume}>
                 Resume
               </button>
+              <button className="btn btn-ghost" onClick={onPhotoMode}>
+                📸 Photo Mode
+              </button>
               <button className="btn btn-ghost" onClick={onRestart}>
-                Restart Night
+                Restart Level
               </button>
               <button className="btn btn-ghost" onClick={() => setView('settings')}>
                 Settings

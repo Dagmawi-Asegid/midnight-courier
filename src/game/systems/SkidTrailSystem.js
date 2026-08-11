@@ -22,8 +22,15 @@ export class SkidTrailSystem {
 
   update(dt) {
     if (this.marks.length === 0) return;
-    for (const m of this.marks) m.life -= dt;
-    this.marks = this.marks.filter((m) => m.life > 0);
+    // In-place compaction instead of .filter() — avoids allocating a new array every frame
+    // while the player is drifting (which can add marks continuously for seconds at a time).
+    let write = 0;
+    for (let read = 0; read < this.marks.length; read++) {
+      const m = this.marks[read];
+      m.life -= dt;
+      if (m.life > 0) this.marks[write++] = m;
+    }
+    this.marks.length = write;
   }
 
   draw(ctx) {

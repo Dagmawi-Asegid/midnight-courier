@@ -32,7 +32,6 @@ import {
   playSkidSound,
   playTimeBonusSound,
 } from '../utils/sound.js';
-import { TIME_PICKUP_SECONDS } from '../entities/TimePickup.js';
 
 const HUD_UPDATE_INTERVAL = 0.08;
 const NEAR_MISS_BAND = 24; // px beyond the actual collision radius that counts as "close"
@@ -79,7 +78,12 @@ export class GameEngine {
     this.effects = new EffectsSystem();
     this.npcVehicles = spawnTraffic(this.city, this.rng, this.difficulty.trafficCount);
     this.obstacles = spawnObstacles(this.city, this.rng, this.difficulty.obstacleCount).concat(this.city.parkedVehicles);
-    this.timePickups = spawnTimePickups(this.city, this.rng, this.difficulty.timePickupCount);
+    this.timePickups = spawnTimePickups(
+      this.city,
+      this.rng,
+      this.difficulty.timePickupCount,
+      this.difficulty.timeRefillSeconds
+    );
     this.ambientPedestrians = this._spawnAmbientPedestrians(qualityDensity);
     this.skidTrail = new SkidTrailSystem();
     this.camera = new Camera(this.city.width, this.city.height);
@@ -92,8 +96,17 @@ export class GameEngine {
     this.deliveriesFailed = 0;
     this.bestCombo = 0;
     this.distanceTraveled = 0;
+    // Lifetime-achievement tracking for this level only — aggregated into career stats by the
+    // reducer once the level ends (see achievements.js).
+    this._maxSpeedThisNight = 0;
+    this._shortcutsThisNight = 0;
+    this._longestDeliveryMeters = 0;
+    this._tookDamageThisNight = false;
     this.running = false;
     this.paused = false;
+    this.photoMode = false;
+    this._photoPanVX = 0;
+    this._photoPanVY = 0;
     this.time = 0;
     this._hudAccumulator = 0;
     this._shakeMag = 0;
@@ -177,6 +190,51 @@ export class GameEngine {
     this._lastTs = performance.now();
   }
 
+  /** Photo mode: the world stays frozen (same `paused` mechanism as the pause menu — timer,
+   * physics and AI all stop) but WASD/arrows are repurposed to freely pan the camera instead of
+   * driving, so the player can compose a shot of a frozen moment from any angle. Must be called
+   * while already paused; entering/exiting doesn't itself change the paused state so it composes
+   * cleanly with the pause menu (open pause → photo mode → back to pause → resume). */
+  enterPhotoMode() {
+    this.photoMode = true;
+    this._photoPanVX = 0;
+    this._photoPanVY = 0;
+  }
+
+  exitPhotoMode() {
+    this.photoMode = false;
+  }
+
+  /** Multiplicative zoom step (e.g. from a mouse wheel), clamped to a sane cinematic range. */
+  adjustPhotoZoom(factor) {
+    this.camera.zoom = clamp(this.camera.zoom * factor, 0.4, 2.5);
+  }
+
+  /** Smoothed free-pan camera movement for photo mode — eased acceleration toward the target
+   * direction (rather than snapping straight to full speed) so panning reads as deliberate
+   * camera-operator movement instead of a rigid cursor drag. Holding boost pans faster. */
+  _updatePhotoCamera(dt) {
+    const { state } = this.input;
+    const panSpeed = state.boost ? 900 : 380;
+    let dx = 0;
+    let dy = 0;
+    if (state.left) dx -= 1;
+    if (state.right) dx += 1;
+    if (state.up) dy -= 1;
+    if (state.down) dy += 1;
+    const len = Math.hypot(dx, dy) || 1;
+    const targetVX = (dx / len) * panSpeed;
+    const targetVY = (dy / len) * panSpeed;
+    const ease = clamp(6 * dt, 0, 1);
+    this._photoPanVX += (targetVX - this._photoPanVX) * ease;
+    this._photoPanVY += (targetVY - this._photoPanVY) * ease;
+
+    const maxX = Math.max(0, this.camera.worldWidth - this.camera.viewWidth);
+    const maxY = Math.max(0, this.camera.worldHeight - this.camera.viewHeight);
+    this.camera.x = clamp(this.camera.x + this._photoPanVX * dt, 0, maxX);
+    this.camera.y = clamp(this.camera.y + this._photoPanVY * dt, 0, maxY);
+  }
+
   _resize() {
     const parent = this.canvas.parentElement;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -188,6 +246,7 @@ export class GameEngine {
     this.canvas.style.height = `${h}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.camera.resize(w, h);
+    this._vignetteGradient = null; // stale after a resize — rebuilt lazily on next draw
   }
 
   _loop(ts) {
@@ -198,6 +257,8 @@ export class GameEngine {
     if (!this.paused) {
       this.time += dt;
       this._update(dt);
+    } else if (this.photoMode) {
+      this._updatePhotoCamera(dt);
     }
     this._draw();
 
@@ -217,6 +278,7 @@ export class GameEngine {
     this._shakeMag = Math.max(0, this._shakeMag - dt * 50);
 
     this.player.update(dt, this.input.state);
+    this._maxSpeedThisNight = Math.max(this._maxSpeedThisNight, Math.abs(this.player.speed));
 
     if (this.player.isBoosting && !this._wasBoosting) playBoostSound();
     this._wasBoosting = this.player.isBoosting;
@@ -254,6 +316,7 @@ export class GameEngine {
     if (impact > IMPACT_SOUND_THRESHOLD) {
       playImpactSound(impact);
       this.triggerShake(2 + impact * 10);
+      this._tookDamageThisNight = true;
     }
     this._updateNearMisses();
     this._updateTimePickups();
@@ -310,11 +373,11 @@ export class GameEngine {
       const d = dist(this.player.x, this.player.y, p.x, p.y);
       if (d <= this.player.stats.radius + p.radius) {
         p.collected = true;
-        this.timeRemaining += TIME_PICKUP_SECONDS;
-        this.effects.spawnText(p.x, p.y - 18, `+${TIME_PICKUP_SECONDS}s`, '#7dff5c');
+        this.timeRemaining += p.seconds;
+        this.effects.spawnText(p.x, p.y - 18, `+${p.seconds}s`, '#7dff5c');
         this.effects.spawnRing(p.x, p.y, '#7dff5c');
         playTimeBonusSound();
-        this.onEvent?.({ type: 'timeBonus', seconds: TIME_PICKUP_SECONDS });
+        this.onEvent?.({ type: 'timeBonus', seconds: p.seconds });
       }
     }
   }
@@ -336,6 +399,7 @@ export class GameEngine {
         this.onEvent?.({ type: 'penalty', seconds: n.seconds, reason: n.reason });
       } else if (n.kind === 'boostRefill') {
         this.player.refillBoost();
+        this._shortcutsThisNight += 1;
         this.effects.spawnText(this.player.x, this.player.y - 20, 'BOOST FULL', '#7dfcff');
         this.onEvent?.({ type: 'boostRefill' });
       } else if (n.kind === 'started') {
@@ -363,6 +427,7 @@ export class GameEngine {
       this.money += reward;
       this.deliveriesCompleted += 1;
       this.bestCombo = Math.max(this.bestCombo, this.combo.count);
+      this._longestDeliveryMeters = Math.max(this._longestDeliveryMeters, event.order.distance / 8);
       this.effects.spawnRing(event.order.dropoff.x, event.order.dropoff.y, event.order.type.color);
       this.effects.spawnText(event.order.dropoff.x, event.order.dropoff.y - 20, `+$${reward}`, '#9dffb0');
       if (this.combo.count > 1) {
@@ -495,6 +560,10 @@ export class GameEngine {
       deliveriesFailed: this.deliveriesFailed,
       bestCombo: this.bestCombo,
       distanceTraveled: this.distanceTraveled,
+      maxSpeedReached: Math.round(this._maxSpeedThisNight),
+      shortcutsCollected: this._shortcutsThisNight,
+      longestDeliveryMeters: Math.round(this._longestDeliveryMeters),
+      tookDamage: this._tookDamageThisNight,
     });
   }
 
@@ -530,19 +599,24 @@ export class GameEngine {
     if (this.shadowsEnabled) this._drawVignette();
   }
 
+  /** The vignette shape only depends on viewport size, which rarely changes — cache the gradient
+   * across frames instead of allocating a new CanvasGradient every single frame, and only rebuild
+   * it (via `_resize`) when the viewport actually does change. */
   _drawVignette() {
     const { ctx, camera } = this;
-    const gradient = ctx.createRadialGradient(
-      camera.viewWidth / 2,
-      camera.viewHeight / 2,
-      camera.viewHeight * 0.35,
-      camera.viewWidth / 2,
-      camera.viewHeight / 2,
-      camera.viewHeight * 0.85
-    );
-    gradient.addColorStop(0, 'rgba(0,0,0,0)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0.55)');
-    ctx.fillStyle = gradient;
+    if (!this._vignetteGradient) {
+      this._vignetteGradient = ctx.createRadialGradient(
+        camera.viewWidth / 2,
+        camera.viewHeight / 2,
+        camera.viewHeight * 0.35,
+        camera.viewWidth / 2,
+        camera.viewHeight / 2,
+        camera.viewHeight * 0.85
+      );
+      this._vignetteGradient.addColorStop(0, 'rgba(0,0,0,0)');
+      this._vignetteGradient.addColorStop(1, 'rgba(0,0,0,0.55)');
+    }
+    ctx.fillStyle = this._vignetteGradient;
     ctx.fillRect(0, 0, camera.viewWidth, camera.viewHeight);
   }
 }

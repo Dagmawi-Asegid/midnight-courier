@@ -2,6 +2,41 @@ import { CELL_SIZE, DISTRICTS, ROAD_WIDTH } from '../engine/constants.js';
 import { getTrafficLightPhase } from '../engine/trafficLightPhase.js';
 import { CULL_MARGIN, isVisible } from '../utils/viewport.js';
 
+// Pre-rendered glow sprites, built lazily once and reused every frame — every streetlight and
+// entrance glow used to call ctx.createRadialGradient() fresh each frame, which is a real
+// allocation cost at scale (dozens of visible lights). A single cached sprite blitted with
+// ctx.drawImage() is far cheaper and looks identical (pulse is applied via globalAlpha).
+let streetlightGlowSprite = null;
+let entranceGlowSprite = null;
+
+function buildGlowSprite(radius, innerColor, outerColor) {
+  const size = radius * 2;
+  const sprite = document.createElement('canvas');
+  sprite.width = size;
+  sprite.height = size;
+  const sctx = sprite.getContext('2d');
+  const gradient = sctx.createRadialGradient(radius, radius, 2, radius, radius, radius);
+  gradient.addColorStop(0, innerColor);
+  gradient.addColorStop(1, outerColor);
+  sctx.fillStyle = gradient;
+  sctx.fillRect(0, 0, size, size);
+  return sprite;
+}
+
+function getStreetlightGlowSprite() {
+  if (!streetlightGlowSprite) {
+    streetlightGlowSprite = buildGlowSprite(46, 'rgba(255, 224, 150, 0.55)', 'rgba(255, 224, 150, 0)');
+  }
+  return streetlightGlowSprite;
+}
+
+function getEntranceGlowSprite() {
+  if (!entranceGlowSprite) {
+    entranceGlowSprite = buildGlowSprite(30, 'rgba(255, 200, 120, 0.32)', 'rgba(255, 200, 120, 0)');
+  }
+  return entranceGlowSprite;
+}
+
 /** Draws the asphalt grid, lane markings and curb lines. */
 function drawRoads(ctx, city, camera) {
   ctx.fillStyle = '#1a1c24';
@@ -172,13 +207,8 @@ function drawVendorCart(ctx, d) {
 function drawEntranceGlow(ctx, d, time) {
   const pulse = 0.55 + 0.25 * Math.sin(time * 2 + d.x * 0.02);
   ctx.save();
-  const gradient = ctx.createRadialGradient(d.x, d.y, 2, d.x, d.y, 30);
-  gradient.addColorStop(0, `rgba(255, 200, 120, ${0.32 * pulse})`);
-  gradient.addColorStop(1, 'rgba(255, 200, 120, 0)');
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(d.x, d.y, 30, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.globalAlpha = pulse;
+  ctx.drawImage(getEntranceGlowSprite(), d.x - 30, d.y - 30);
   ctx.restore();
 }
 
@@ -221,17 +251,32 @@ function drawPlazas(ctx, city, camera, time) {
   }
 }
 
+const FLICKER_STEP = 0.12; // ~8 recomputes/sec — flicker is a slow ambient effect, doesn't need 60fps precision
+
+/** Recomputes each lit window's flicker alpha only a few times a second (cached on the building
+ * itself) instead of calling Math.sin() per window every single frame — a tall downtown building
+ * can have 100+ windows, and there are often a dozen-plus visible at once. */
 function drawBuildingWindows(ctx, b, time) {
-  for (const win of b.windows) {
+  const bucket = Math.floor(time / FLICKER_STEP);
+  if (b._flickerBucket !== bucket) {
+    b._flickerBucket = bucket;
+    if (!b._flickerCache) b._flickerCache = new Array(b.windows.length);
+    for (let i = 0; i < b.windows.length; i++) {
+      const win = b.windows[i];
+      b._flickerCache[i] = win.lit ? 0.75 + 0.25 * Math.sin(time * win.flickerSpeed + win.flickerSeed) : 0;
+    }
+  }
+  const cache = b._flickerCache;
+  for (let i = 0; i < b.windows.length; i++) {
+    const win = b.windows[i];
     if (!win.lit) continue;
-    const flicker = 0.75 + 0.25 * Math.sin(time * win.flickerSpeed + win.flickerSeed);
     const wx = b.x + win.cx * b.w;
     const wy = b.y + win.cy * b.h;
-    ctx.globalAlpha = flicker;
+    ctx.globalAlpha = cache[i];
     ctx.fillStyle = win.color;
     ctx.fillRect(wx - 3, wy - 4, 6, 8);
-    ctx.globalAlpha = 1;
   }
+  ctx.globalAlpha = 1;
 }
 
 /** Small silhouette of a jebena (Ethiopian coffee pot) marking a coffee house's arched sign. */
@@ -330,19 +375,14 @@ function drawBuildings(ctx, city, camera, time) {
 }
 
 function drawStreetlights(ctx, city, camera) {
+  const sprite = getStreetlightGlowSprite();
   for (const s of city.streetlights) {
     if (!isVisible(camera, s.x, s.y, 60)) continue;
     ctx.save();
     ctx.fillStyle = '#05060a';
     ctx.fillRect(s.x - 2, s.y - 18, 4, 22);
 
-    const gradient = ctx.createRadialGradient(s.x, s.y - 20, 2, s.x, s.y - 20, 46);
-    gradient.addColorStop(0, 'rgba(255, 224, 150, 0.55)');
-    gradient.addColorStop(1, 'rgba(255, 224, 150, 0)');
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y - 20, 46, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.drawImage(sprite, s.x - 46, s.y - 66);
 
     ctx.fillStyle = '#ffe08a';
     ctx.beginPath();

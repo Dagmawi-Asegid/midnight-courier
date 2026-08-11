@@ -9,6 +9,18 @@ function proximityColor(meters) {
   return '#2fe8ff';
 }
 
+/** A proper directional arrowhead (a "dart" shape with a concave back) rather than a plain
+ * triangle — the notch at the back is what makes it read unambiguously as "this way" at a
+ * glance instead of just being a wedge. Points right at rotate(0deg), matching the bearing
+ * convention used by both callers below (0° = +x). */
+function DirectionArrow({ deg }) {
+  return (
+    <svg className="direction-arrow" viewBox="0 0 24 24" style={{ transform: `rotate(${deg}deg)` }}>
+      <path d="M22 12 L4 3 L9 12 L4 21 Z" />
+    </svg>
+  );
+}
+
 function NavCompass({ nav, precision }) {
   if (!nav) return null;
   const deg = (nav.bearing * 180) / Math.PI;
@@ -22,7 +34,7 @@ function NavCompass({ nav, precision }) {
   return (
     <div className={`nav-compass ${close ? 'nav-compass--close' : ''}`} style={{ '--nav-color': color }}>
       <div className="nav-dial">
-        <div className="nav-arrow" style={{ transform: `rotate(${deg}deg)` }} />
+        <DirectionArrow deg={deg} />
       </div>
       <div className="nav-info">
         <span className="nav-label">{label}</span>
@@ -40,7 +52,7 @@ function ShortcutPing({ ping }) {
   const meters = Math.max(0, Math.round(ping.distance / 8));
   return (
     <div className="shortcut-ping">
-      <div className="shortcut-ping-arrow" style={{ transform: `rotate(${deg}deg)` }} />
+      <DirectionArrow deg={deg} />
       <span>Shortcut · {meters}m</span>
     </div>
   );
@@ -80,21 +92,26 @@ function OrderPanel({ order, phase, nav, mapInfoLevel }) {
 
 /** Up to three candidate jobs offered together so the player can weigh pay vs. distance vs.
  * risk before committing — picking one is a click, but ignoring it entirely is also fine: the
- * thin progress bar shows how long until the game auto-picks the first one for you. */
+ * thin progress bar shows how long until the game auto-picks the first one for you. Lives in
+ * the same top-left slot the order panel occupies once a job is active (that spot is otherwise
+ * empty during selection), as a compact vertical list rather than a center-screen dialog, so
+ * the player can keep driving and see the road while choosing. */
 function DeliverySelectionPanel({ candidates, selectionProgress, onSelect }) {
   if (!candidates || candidates.length === 0) return null;
   return (
     <div className="selection-panel">
       <p className="selection-title">Choose your next job</p>
-      <div className="selection-cards">
+      <div className="selection-list">
         {candidates.map((c, i) => (
-          <button key={i} className="selection-card" style={{ '--order-color': c.type.color }} onClick={() => onSelect(i)}>
-            <span className="selection-card-icon">{c.type.icon}</span>
-            <span className="selection-card-label">{c.type.label}</span>
-            <span className="selection-card-pay">${c.potentialPay}</span>
-            <span className="selection-card-meta">
-              {c.distanceMeters}m · {c.pickupDistrict} → {c.dropoffDistrict}
+          <button key={i} className="selection-row" style={{ '--order-color': c.type.color }} onClick={() => onSelect(i)}>
+            <span className="selection-row-icon">{c.type.icon}</span>
+            <span className="selection-row-info">
+              <span className="selection-row-label">{c.type.label}</span>
+              <span className="selection-row-meta">
+                {c.distanceMeters}m · {c.pickupDistrict} → {c.dropoffDistrict}
+              </span>
             </span>
+            <span className="selection-row-pay">${c.potentialPay}</span>
           </button>
         ))}
       </div>
@@ -159,7 +176,7 @@ export default function HUD({ hud, nightDuration, night, city, onPause, onSelect
     <div className="hud">
       <div className="hud-top">
         <div className="hud-pill">
-          <span className="hud-label">Night</span>
+          <span className="hud-label">Level</span>
           <span className="hud-value">{night}</span>
         </div>
         <div className={`hud-pill hud-timer ${urgent ? 'hud-timer--urgent' : ''}`}>

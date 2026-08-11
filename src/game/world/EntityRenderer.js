@@ -131,7 +131,7 @@ export function drawTimePickups(ctx, pickups, camera, time) {
     ctx.fillStyle = '#eaffe0';
     ctx.font = '700 8px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('+20', 0, 3);
+    ctx.fillText(`+${p.seconds}`, 0, 3);
     ctx.restore();
   }
 }

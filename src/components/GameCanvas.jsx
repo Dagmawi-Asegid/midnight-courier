@@ -3,6 +3,7 @@ import { GameEngine } from '../game/engine/GameEngine.js';
 import { CITY_SEED } from '../game/engine/constants.js';
 import HUD from './HUD.jsx';
 import PauseMenu from './PauseMenu.jsx';
+import PhotoModeOverlay from './PhotoModeOverlay.jsx';
 
 let toastId = 0;
 
@@ -29,11 +30,15 @@ function toastForEvent(event) {
   }
 }
 
+/** The three mutually-exclusive overlays that can sit on top of the live canvas. 'none' is
+ * normal play; 'pause' and 'photo' both freeze the engine (see GameEngine.pause/enterPhotoMode)
+ * but swap in a different UI — this keeps the transitions between them (e.g. pause → photo mode
+ * → back to pause) simple state changes rather than juggling separate booleans. */
 export default function GameCanvas({ stats, nightDuration, night, difficulty, settings, onNightEnd, onSettingsChange, onRestart, onQuitToMenu }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const [city, setCity] = useState(null);
-  const [paused, setPaused] = useState(false);
+  const [overlay, setOverlay] = useState('none');
   const [hud, setHud] = useState({
     timeRemaining: nightDuration,
     money: 0,
@@ -92,57 +97,101 @@ export default function GameCanvas({ stats, nightDuration, night, difficulty, se
   }, [night]);
 
   // A separate top-level listener (not InputManager, which only tracks gameplay keys) so Escape
-  // works regardless of which movement keys happen to be held at the moment.
+  // works regardless of which movement keys happen to be held at the moment. Escape backs out
+  // one level at a time: photo mode -> pause -> playing, matching the "open pause, then jump
+  // into photo mode" entry path.
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.code !== 'Escape') return;
-      setPaused((prev) => {
-        const next = !prev;
-        if (next) engineRef.current?.pause();
-        else engineRef.current?.resume();
-        return next;
+      setOverlay((prev) => {
+        if (prev === 'photo') {
+          engineRef.current?.exitPhotoMode();
+          engineRef.current?.resume();
+          return 'none';
+        }
+        if (prev === 'pause') {
+          engineRef.current?.resume();
+          return 'none';
+        }
+        engineRef.current?.pause();
+        return 'pause';
       });
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // Mouse wheel zoom, only listened for while photo mode is actually active.
+  useEffect(() => {
+    if (overlay !== 'photo') return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      engineRef.current?.adjustPhotoZoom(1 - e.deltaY * 0.001);
+    };
+    const canvas = canvasRef.current;
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, [overlay]);
+
   const handlePauseClick = () => {
-    setPaused(true);
     engineRef.current?.pause();
+    setOverlay('pause');
   };
   const handleResume = () => {
-    setPaused(false);
     engineRef.current?.resume();
+    setOverlay('none');
+  };
+  const handleEnterPhotoMode = () => {
+    engineRef.current?.enterPhotoMode();
+    setOverlay('photo');
+  };
+  const handleExitPhotoMode = () => {
+    engineRef.current?.exitPhotoMode();
+    engineRef.current?.resume();
+    setOverlay('none');
+  };
+  const handleCapture = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = `midnight-courier-${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
   };
   const handleSelectDelivery = (index) => engineRef.current?.selectDelivery(index);
 
   return (
     <div className="game-screen">
       <canvas ref={canvasRef} className="game-canvas" />
-      <HUD hud={hud} nightDuration={nightDuration} night={night} city={city} onPause={handlePauseClick} onSelectDelivery={handleSelectDelivery} />
-      {banner && (
+      {overlay !== 'photo' && (
+        <HUD hud={hud} nightDuration={nightDuration} night={night} city={city} onPause={handlePauseClick} onSelectDelivery={handleSelectDelivery} />
+      )}
+      {overlay === 'none' && banner && (
         <div className="event-banner">
           <span className="event-banner-icon">{banner.icon}</span>
           {banner.label}
         </div>
       )}
-      <div className="toast-layer">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast toast--${t.kind}`}>
-            {t.text}
-          </div>
-        ))}
-      </div>
-      {paused && (
+      {overlay === 'none' && (
+        <div className="toast-layer">
+          {toasts.map((t) => (
+            <div key={t.id} className={`toast toast--${t.kind}`}>
+              {t.text}
+            </div>
+          ))}
+        </div>
+      )}
+      {overlay === 'pause' && (
         <PauseMenu
           settings={settings}
           onSettingsChange={onSettingsChange}
           onResume={handleResume}
           onRestart={onRestart}
           onQuitToMenu={onQuitToMenu}
+          onPhotoMode={handleEnterPhotoMode}
         />
       )}
+      {overlay === 'photo' && <PhotoModeOverlay onCapture={handleCapture} onExit={handleExitPhotoMode} />}
     </div>
   );
 }

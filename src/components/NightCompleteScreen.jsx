@@ -1,6 +1,22 @@
 import { formatMoney } from '../game/utils/math.js';
+import { ACHIEVEMENTS } from '../state/achievements.js';
 
 const RATING_LABELS = { 1: 'Rough Night', 2: 'Solid Shift', 3: 'Perfect Run' };
+
+function UnlockedAchievements({ ids }) {
+  if (!ids || ids.length === 0) return null;
+  const defs = ids.map((id) => ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean);
+  return (
+    <div className="summary-unlocks">
+      <p className="summary-unlocks-title">Achievement{defs.length > 1 ? 's' : ''} Unlocked</p>
+      {defs.map((a) => (
+        <span key={a.id} className="summary-unlock-badge">
+          {a.icon} {a.label}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function StarRating({ rating }) {
   return (
@@ -27,7 +43,7 @@ export default function NightCompleteScreen({ summary, totalMoney, onContinue })
         </>
       ) : (
         <>
-          <h2 className="summary-title">Night {summary.night} Complete</h2>
+          <h2 className="summary-title">Level {summary.night} Complete</h2>
           <StarRating rating={summary.rating} />
           <p className="summary-rating-label">{RATING_LABELS[summary.rating]}</p>
         </>
@@ -63,6 +79,8 @@ export default function NightCompleteScreen({ summary, totalMoney, onContinue })
           <span className="summary-value">{formatMoney(totalMoney)}</span>
         </div>
       </div>
+
+      <UnlockedAchievements ids={summary.newlyUnlocked} />
 
       <button className="btn btn-primary" onClick={onContinue}>
         Choose Upgrades

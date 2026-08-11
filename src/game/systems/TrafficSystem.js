@@ -85,8 +85,9 @@ export function spawnObstacles(city, rng, count) {
 }
 
 /** Scatters collectible time-refill pickups along road lanes, the same way obstacles are placed
- * so they always land somewhere drivable. */
-export function spawnTimePickups(city, rng, count) {
+ * so they always land somewhere drivable. `seconds` is the refill amount each one grants
+ * (scales with difficulty — see `timeRefillSeconds` in difficulty.js). */
+export function spawnTimePickups(city, rng, count, seconds = 20) {
   const pickups = [];
   for (let i = 0; i < count; i++) {
     const horizontal = rng() < 0.5;
@@ -95,13 +96,23 @@ export function spawnTimePickups(city, rng, count) {
       const rowIndex = Math.floor(range(rng, 0, CITY_ROWS + 1));
       const laneCenter = city.roadCenters.rows[rowIndex];
       pickups.push(
-        new TimePickup(range(rng, 40, WORLD_WIDTH - 40), laneCenter + range(rng, -ROAD_WIDTH * 0.3, ROAD_WIDTH * 0.3), pulseSeed)
+        new TimePickup(
+          range(rng, 40, WORLD_WIDTH - 40),
+          laneCenter + range(rng, -ROAD_WIDTH * 0.3, ROAD_WIDTH * 0.3),
+          seconds,
+          pulseSeed
+        )
       );
     } else {
       const colIndex = Math.floor(range(rng, 0, CITY_COLS + 1));
       const laneCenter = city.roadCenters.cols[colIndex];
       pickups.push(
-        new TimePickup(laneCenter + range(rng, -ROAD_WIDTH * 0.3, ROAD_WIDTH * 0.3), range(rng, 40, WORLD_HEIGHT - 40), pulseSeed)
+        new TimePickup(
+          laneCenter + range(rng, -ROAD_WIDTH * 0.3, ROAD_WIDTH * 0.3),
+          range(rng, 40, WORLD_HEIGHT - 40),
+          seconds,
+          pulseSeed
+        )
       );
     }
   }

@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { formatMoney } from '../game/utils/math.js';
 
-export default function MainMenu({ onStart, onOpenSettings, totalMoney, night }) {
-  const hasProgress = totalMoney > 0 || night > 1;
+export default function MainMenu({ onStart, onNewGame, onOpenSettings, onOpenAchievements, onOpenLevels, hasProgress, totalMoney, night }) {
+  const [confirmingNewGame, setConfirmingNewGame] = useState(false);
 
   return (
     <div className="screen menu-screen">
@@ -12,18 +13,43 @@ export default function MainMenu({ onStart, onOpenSettings, totalMoney, night })
       </h1>
       <p className="menu-subtitle">Deliver the city's secrets before sunrise.</p>
 
-      <div className="menu-actions">
-        <button className="btn btn-primary" onClick={onStart}>
-          Start Shift
-        </button>
-        <button className="btn btn-ghost" onClick={onOpenSettings}>
-          Settings
-        </button>
-      </div>
+      {confirmingNewGame ? (
+        <div className="menu-confirm">
+          <p>Erase your saved progress and start over?</p>
+          <div className="menu-actions">
+            <button className="btn btn-ghost" onClick={() => setConfirmingNewGame(false)}>
+              Cancel
+            </button>
+            <button className="btn btn-danger" onClick={onNewGame}>
+              Yes, start over
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="menu-actions">
+          <button className="btn btn-primary menu-cta" onClick={hasProgress ? onStart : onNewGame}>
+            {hasProgress ? 'Continue' : 'New Game'}
+          </button>
+          {hasProgress && (
+            <button className="btn btn-ghost" onClick={() => setConfirmingNewGame(true)}>
+              New Game
+            </button>
+          )}
+          <button className="btn btn-ghost" onClick={onOpenLevels}>
+            Levels
+          </button>
+          <button className="btn btn-ghost" onClick={onOpenAchievements}>
+            Achievements
+          </button>
+          <button className="btn btn-ghost" onClick={onOpenSettings}>
+            Settings
+          </button>
+        </div>
+      )}
 
-      {hasProgress && (
+      {hasProgress && !confirmingNewGame && (
         <p className="menu-progress-hint">
-          Resuming saved progress — {formatMoney(totalMoney)} banked, Night {night}
+          Resuming saved progress — {formatMoney(totalMoney)} banked, Level {night}
         </p>
       )}
 

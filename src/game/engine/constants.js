@@ -53,8 +53,8 @@ export const UPGRADE_DEFS = [
     icon: '💨',
     description: "Raises your bike's maximum speed.",
     maxLevel: 5,
-    baseCost: 55,
-    costGrowth: 1.5,
+    baseCost: 45,
+    costGrowth: 1.42,
     benefit: () => '+35 top speed',
     apply: (stats, level) => {
       stats.maxSpeed = PLAYER_BASE_STATS.maxSpeed + level * 35;
@@ -67,8 +67,8 @@ export const UPGRADE_DEFS = [
     icon: '🏎️',
     description: 'Reach top speed faster off the line.',
     maxLevel: 5,
-    baseCost: 50,
-    costGrowth: 1.48,
+    baseCost: 42,
+    costGrowth: 1.4,
     benefit: () => '+90 acceleration',
     apply: (stats, level) => {
       stats.acceleration = PLAYER_BASE_STATS.acceleration + level * 90;
@@ -81,8 +81,8 @@ export const UPGRADE_DEFS = [
     icon: '🛞',
     description: 'Tighter, more responsive steering.',
     maxLevel: 5,
-    baseCost: 50,
-    costGrowth: 1.45,
+    baseCost: 42,
+    costGrowth: 1.38,
     benefit: () => '+0.3 turn rate',
     apply: (stats, level) => {
       stats.turnSpeed = PLAYER_BASE_STATS.turnSpeed + level * 0.3;
@@ -95,8 +95,8 @@ export const UPGRADE_DEFS = [
     icon: '🛑',
     description: 'Stop and reverse out of trouble faster.',
     maxLevel: 5,
-    baseCost: 45,
-    costGrowth: 1.42,
+    baseCost: 38,
+    costGrowth: 1.36,
     benefit: () => '+140 brake power',
     apply: (stats, level) => {
       stats.brakePower = PLAYER_BASE_STATS.brakePower + level * 140;
@@ -109,8 +109,8 @@ export const UPGRADE_DEFS = [
     icon: '🔋',
     description: 'Boost drains slower and refills faster.',
     maxLevel: 5,
-    baseCost: 65,
-    costGrowth: 1.55,
+    baseCost: 55,
+    costGrowth: 1.46,
     benefit: () => '-12% boost drain, +15% regen',
     apply: (stats, level) => {
       stats.boostDrainPerSecond = BOOST_CONFIG.drainPerSecond * (1 - level * 0.12);
@@ -126,8 +126,8 @@ export const UPGRADE_DEFS = [
     icon: '💰',
     description: 'Earn a bigger cut on every delivery.',
     maxLevel: 5,
-    baseCost: 90,
-    costGrowth: 1.6,
+    baseCost: 75,
+    costGrowth: 1.5,
     benefit: () => '+8% payout on every delivery',
     apply: (stats, level) => {
       stats.rewardMultiplier = 1 + level * 0.08;
@@ -140,8 +140,8 @@ export const UPGRADE_DEFS = [
     icon: '⏱️',
     description: 'Extends how long each night runs.',
     maxLevel: 5,
-    baseCost: 75,
-    costGrowth: 1.55,
+    baseCost: 62,
+    costGrowth: 1.46,
     benefit: () => '+12s per night',
     apply: (stats, level) => {
       stats.extraTime = level * 12;
@@ -154,8 +154,8 @@ export const UPGRADE_DEFS = [
     icon: '🔥',
     description: 'Each streak level pays out more.',
     maxLevel: 5,
-    baseCost: 80,
-    costGrowth: 1.55,
+    baseCost: 65,
+    costGrowth: 1.46,
     benefit: () => '+3% bonus per combo stack',
     apply: (stats, level) => {
       stats.comboPerStackBonus = level * 0.03;
@@ -170,8 +170,8 @@ export const UPGRADE_DEFS = [
     icon: '🧭',
     description: 'Sharper distance readouts and a bigger auto-deliver radius.',
     maxLevel: 3,
-    baseCost: 40,
-    costGrowth: 1.45,
+    baseCost: 32,
+    costGrowth: 1.38,
     benefit: (nextLevel) =>
       [
         '+8 auto-deliver radius · exact distance readout',
@@ -179,7 +179,7 @@ export const UPGRADE_DEFS = [
         '+8 auto-deliver radius · full route district intel',
       ][nextLevel - 1],
     apply: (stats, level) => {
-      stats.interactRadius = 34 + level * 8;
+      stats.interactRadius = 42 + level * 8;
       stats.navPrecision = level;
     },
   },
@@ -190,8 +190,8 @@ export const UPGRADE_DEFS = [
     icon: '🔀',
     description: 'Detect nearby shortcut alleys before you see them.',
     maxLevel: 3,
-    baseCost: 60,
-    costGrowth: 1.5,
+    baseCost: 48,
+    costGrowth: 1.43,
     benefit: (nextLevel) => `${Math.round((nextLevel * 450) / 8)}m shortcut detection radius`,
     apply: (stats, level) => {
       stats.shortcutDetectionRadius = level > 0 ? level * 450 : 0;
@@ -204,8 +204,8 @@ export const UPGRADE_DEFS = [
     icon: '🗺️',
     description: 'Reveals district names along your delivery route.',
     maxLevel: 2,
-    baseCost: 35,
-    costGrowth: 1.35,
+    baseCost: 28,
+    costGrowth: 1.3,
     benefit: (nextLevel) =>
       nextLevel >= 2 ? 'Shows pickup + destination neighborhood' : 'Shows destination neighborhood',
     apply: (stats, level) => {
@@ -223,7 +223,7 @@ export function computeStatsFromUpgrades(levels) {
   const stats = {
     ...PLAYER_BASE_STATS,
     extraTime: 0,
-    interactRadius: 34,
+    interactRadius: 42,
     rewardMultiplier: 1,
     comboPerStackBonus: 0,
     boostDrainPerSecond: BOOST_CONFIG.drainPerSecond,
@@ -250,11 +250,11 @@ export const DELIVERY_TYPES = {
     label: 'STANDARD',
     icon: '📦',
     weight: 0.55,
-    basePay: 14,
-    payPerDistance: 0.045,
+    basePay: 18,
+    payPerDistance: 0.05,
     riskMultiplier: 1,
-    timeFactor: 0.01, // seconds of time limit per pixel of distance (~100px/s asymptotic pace)
-    timeBuffer: 4, // flat seconds added so short hops are still makeable
+    timeFactor: 0.009, // seconds of time limit per pixel of distance (~110px/s asymptotic pace)
+    timeBuffer: 6, // flat seconds added so short hops are still makeable
     color: '#7dff5c',
   },
   rush: {
@@ -262,11 +262,11 @@ export const DELIVERY_TYPES = {
     label: 'RUSH',
     icon: '⚡',
     weight: 0.28,
-    basePay: 20,
-    payPerDistance: 0.05,
+    basePay: 25,
+    payPerDistance: 0.055,
     riskMultiplier: 1.15,
-    timeFactor: 0.0061, // tight window — demands a near-sustained-top-speed pace
-    timeBuffer: 2.5,
+    timeFactor: 0.0058, // tight window — demands a near-sustained-top-speed pace
+    timeBuffer: 4,
     color: '#2fe8ff',
   },
   danger: {
@@ -274,11 +274,11 @@ export const DELIVERY_TYPES = {
     label: 'DANGER',
     icon: '☠️',
     weight: 0.17,
-    basePay: 26,
-    payPerDistance: 0.06,
+    basePay: 33,
+    payPerDistance: 0.065,
     riskMultiplier: 1.5,
-    timeFactor: 0.0083,
-    timeBuffer: 3.5,
+    timeFactor: 0.0075,
+    timeBuffer: 5,
     color: '#ff2f6e',
   },
 };

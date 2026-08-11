@@ -24,11 +24,16 @@ export class EffectsSystem {
 
   update(dt) {
     if (this.items.length === 0) return;
-    for (const item of this.items) {
+    // In-place compaction instead of .filter() — avoids allocating a new array every frame
+    // whenever effects are active (payouts/combos/misses can spawn several per second).
+    let write = 0;
+    for (let read = 0; read < this.items.length; read++) {
+      const item = this.items[read];
       item.life -= dt;
       if (item.kind === 'text') item.y -= dt * 26;
+      if (item.life > 0) this.items[write++] = item;
     }
-    this.items = this.items.filter((i) => i.life > 0);
+    this.items.length = write;
   }
 
   draw(ctx) {

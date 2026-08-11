@@ -53,14 +53,19 @@ export class NPCVehicle {
     }
   }
 
-  /** Distance to the stop line of the nearest red/yellow light ahead on this lane, or Infinity. */
+  /** Distance to the stop line of the nearest red/yellow light ahead on this lane, or Infinity.
+   * Which lights are even on this vehicle's lane is static for its whole lifetime (axis/lanePos
+   * never change), so that filter is computed once and cached instead of re-scanning every
+   * traffic light in the city on every single frame of every vehicle's update. */
   _lightStopDistance(city, time) {
+    if (!this._relevantLights) {
+      this._relevantLights = city.trafficLights.filter((light) =>
+        this.axis === 'h' ? Math.abs(light.y - this.lanePos) < ROAD_WIDTH * 0.6 : Math.abs(light.x - this.lanePos) < ROAD_WIDTH * 0.6
+      );
+    }
     const dir = Math.sign(this.cruiseSpeed) || 1;
     let best = Infinity;
-    for (const light of city.trafficLights) {
-      const onLane =
-        this.axis === 'h' ? Math.abs(light.y - this.lanePos) < ROAD_WIDTH * 0.6 : Math.abs(light.x - this.lanePos) < ROAD_WIDTH * 0.6;
-      if (!onLane) continue;
+    for (const light of this._relevantLights) {
       const lightPos = this.axis === 'h' ? light.x : light.y;
       const stopDist = (lightPos - this.pos) * dir - STOP_LINE_OFFSET;
       if (stopDist < -20 || stopDist > STOP_LOOKAHEAD) continue;

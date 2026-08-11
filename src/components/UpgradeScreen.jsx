@@ -102,7 +102,7 @@ export default function UpgradeScreen({ totalMoney, upgradeLevels, night, onBuy,
           Quit to Menu
         </button>
         <button className="btn btn-primary" onClick={onStartNextNight}>
-          Start Next Night
+          Start Next Level
         </button>
       </div>
     </div>

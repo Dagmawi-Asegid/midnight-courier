@@ -1,10 +1,13 @@
 import { formatMoney, formatTime } from '../game/utils/math.js';
 
-export default function NightIntroScreen({ night, totalMoney, nightDuration, challenge, onBegin }) {
+export default function NightIntroScreen({ night, levelCap, totalMoney, nightDuration, challenge, onBegin }) {
   return (
     <div className="screen night-intro-screen">
       <p className="night-intro-eyebrow">Shift Briefing</p>
-      <h1 className="night-intro-title">Night {night}</h1>
+      <h1 className="night-intro-title">
+        Level {night}
+        {levelCap && night >= levelCap && <span className="night-intro-cap"> · MAX</span>}
+      </h1>
       <p className="night-intro-tagline">{challenge.tagline}</p>
 
       <div className="night-intro-stats">
@@ -29,7 +32,7 @@ export default function NightIntroScreen({ night, totalMoney, nightDuration, cha
       )}
 
       <button className="btn btn-primary" onClick={onBegin}>
-        Begin Night
+        Begin Shift
       </button>
     </div>
   );

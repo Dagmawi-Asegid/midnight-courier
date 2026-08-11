@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 function Toggle({ label, checked, onChange }) {
   return (
     <label className="settings-toggle">
@@ -60,8 +62,9 @@ const CONTROLS = [
  * (`variant="menu"`) and an embedded panel inside the pause menu (`variant="pause"`). Every
  * control writes straight through `onChange` and is persisted by the caller immediately —
  * there's no separate "Apply" step, so a setting always reflects what's actually in effect. */
-export default function SettingsScreen({ settings, onChange, onBack, variant = 'menu' }) {
+export default function SettingsScreen({ settings, onChange, onBack, onResetSave, variant = 'menu' }) {
   const set = (section, key) => (value) => onChange(section, key, value);
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   return (
     <div className={variant === 'menu' ? 'screen settings-screen' : 'settings-panel'}>
@@ -132,6 +135,29 @@ export default function SettingsScreen({ settings, onChange, onBack, variant = '
             onChange={set('accessibility', 'highContrast')}
           />
         </section>
+
+        {onResetSave && (
+          <section className="settings-section settings-section--danger">
+            <h4 className="settings-section-title">Save Data</h4>
+            {confirmingReset ? (
+              <div className="settings-reset-confirm">
+                <p>This erases all money, upgrades, level progress and achievements. This can't be undone.</p>
+                <div className="settings-reset-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={() => setConfirmingReset(false)}>
+                    Cancel
+                  </button>
+                  <button className="btn btn-danger btn-sm" onClick={onResetSave}>
+                    Erase everything
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="btn btn-danger btn-sm" onClick={() => setConfirmingReset(true)}>
+                Reset Save
+              </button>
+            )}
+          </section>
+        )}
       </div>
 
       <button className="btn btn-ghost" onClick={onBack}>
