@@ -1,6 +1,6 @@
 import { formatMoney, formatTime } from '../game/utils/math.js';
 
-export default function NightIntroScreen({ night, levelCap, totalMoney, nightDuration, challenge, onBegin }) {
+export default function NightIntroScreen({ night, levelCap, totalMoney, nightDuration, deliveryGoal, retry, challenge, onBegin }) {
   return (
     <div className="screen night-intro-screen">
       <p className="night-intro-eyebrow">Shift Briefing</p>
@@ -9,6 +9,16 @@ export default function NightIntroScreen({ night, levelCap, totalMoney, nightDur
         {levelCap && night >= levelCap && <span className="night-intro-cap"> · MAX</span>}
       </h1>
       <p className="night-intro-tagline">{challenge.tagline}</p>
+
+      {deliveryGoal && (
+        <div className="night-intro-goal">
+          <span className="night-intro-goal-icon">🎯</span>
+          <span>
+            {retry ? 'Try again — deliver' : 'Goal: deliver'} <strong>{deliveryGoal}</strong>
+            {deliveryGoal === 1 ? ' package' : ' packages'} before time runs out to pass this level.
+          </span>
+        </div>
+      )}
 
       <div className="night-intro-stats">
         <div className="night-intro-stat">

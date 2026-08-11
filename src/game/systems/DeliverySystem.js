@@ -5,7 +5,7 @@ import { DELIVERY_TYPES, WORLD_HEIGHT, WORLD_WIDTH } from '../engine/constants.j
 
 const CROSS_DISTRICT_CHANCE = 0.7; // how often the drop-off is pushed into a different district than the pickup
 const WORLD_DIAGONAL = Math.hypot(WORLD_WIDTH, WORLD_HEIGHT);
-const MIN_TIME_LIMIT = 6; // seconds — floor so difficulty scaling can never make an order unmakeable
+const MIN_TIME_LIMIT = 12; // seconds — floor so even the shortest hop gives time to react and ride there
 const CANDIDATE_COUNT = 3; // how many jobs are offered at once in the selection panel
 export const AUTO_SELECT_TIMEOUT = 7; // seconds before the game picks for you, so the run never stalls
 

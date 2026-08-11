@@ -523,6 +523,7 @@ export class GameEngine {
       timeRemaining: this.timeRemaining,
       money: this.money,
       deliveriesCompleted: this.deliveriesCompleted,
+      deliveryGoal: this.difficulty.deliveryGoal ?? null,
       speed: Math.round(Math.abs(this.player.speed)),
       phase: this.deliverySystem.phase,
       carrying: !!this.player.carrying,

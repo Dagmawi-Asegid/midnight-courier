@@ -319,6 +319,16 @@
   text-shadow: 0 0 12px rgba(255, 92, 92, 0.7);
 }
 
+.hud-pill--goal-met {
+  border-color: rgba(125, 255, 92, 0.5);
+  background: rgba(125, 255, 92, 0.12);
+}
+
+.hud-pill--goal-met .hud-value {
+  color: #7dff5c;
+  text-shadow: 0 0 12px rgba(125, 255, 92, 0.6);
+}
+
 .hud-bottom {
   align-self: center;
   display: flex;
@@ -799,6 +809,26 @@
   margin: -8px 0 4px;
   line-height: 1.5;
   animation: screen-fade-in var(--dur-base) var(--ease-standard) 80ms backwards;
+}
+
+.night-intro-goal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 210, 63, 0.1);
+  border: 1px solid rgba(255, 210, 63, 0.35);
+  color: #ffe9a8;
+  border-radius: var(--radius-md);
+  padding: 12px 20px;
+  max-width: 460px;
+  font-size: 14.5px;
+  line-height: 1.4;
+  animation: screen-fade-in var(--dur-base) var(--ease-standard) 100ms backwards;
+}
+
+.night-intro-goal-icon {
+  font-size: 20px;
+  flex-shrink: 0;
 }
 
 .night-intro-stats {
@@ -1542,6 +1572,31 @@
   max-width: 420px;
   margin: -8px 0 4px;
   line-height: 1.5;
+}
+
+/* ---------- goal-not-met variant (some deliveries made, but short of the level's goal) ---------- */
+
+.summary-screen--notpassed .gameover-eyebrow {
+  margin: 0;
+  color: var(--accent-amber);
+  font-size: 12px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.summary-screen--notpassed .summary-title {
+  text-shadow: 0 0 20px var(--accent-amber-soft);
+}
+
+.summary-not-passed {
+  color: var(--text-secondary);
+  max-width: 420px;
+  margin: -8px 0 4px;
+  line-height: 1.5;
+}
+
+.summary-not-passed strong {
+  color: var(--accent-amber);
 }
 
 /* ---------- settings: danger zone ---------- */

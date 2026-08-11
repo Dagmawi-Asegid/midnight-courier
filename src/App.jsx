@@ -120,6 +120,8 @@ export default function App() {
             levelCap={difficulty.levelCap}
             totalMoney={state.totalMoney}
             nightDuration={nightDuration}
+            deliveryGoal={difficulty.deliveryGoal}
+            retry={state.lastNightSummary?.night === state.night && !state.lastNightSummary?.goalMet}
             challenge={challenge}
             onBegin={handleBeginNight}
           />
@@ -153,6 +155,7 @@ export default function App() {
             totalMoney={state.totalMoney}
             upgradeLevels={state.upgradeLevels}
             night={state.night}
+            goalMet={state.lastNightSummary?.goalMet ?? true}
             onBuy={handleBuyUpgrade}
             onStartNextNight={handleStartNextNight}
             onQuit={handleQuit}

@@ -53,7 +53,7 @@ function UpgradeCard({ def, level, totalMoney, costMultiplier, onBuy }) {
   );
 }
 
-export default function UpgradeScreen({ totalMoney, upgradeLevels, night, onBuy, onStartNextNight, onQuit }) {
+export default function UpgradeScreen({ totalMoney, upgradeLevels, night, goalMet, onBuy, onStartNextNight, onQuit }) {
   const costMultiplier = getDifficulty(night).upgradeCostMultiplier;
   const pricesUp = costMultiplier > 1.02;
 
@@ -102,7 +102,7 @@ export default function UpgradeScreen({ totalMoney, upgradeLevels, night, onBuy,
           Quit to Menu
         </button>
         <button className="btn btn-primary" onClick={onStartNextNight}>
-          Start Next Level
+          {goalMet ? 'Start Next Level' : 'Retry Level'}
         </button>
       </div>
     </div>

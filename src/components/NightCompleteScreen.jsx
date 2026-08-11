@@ -32,14 +32,24 @@ function StarRating({ rating }) {
 
 export default function NightCompleteScreen({ summary, totalMoney, onContinue }) {
   const distanceMeters = Math.round(summary.distanceTraveled / 8);
+  const notPassed = !summary.goalMet && !summary.gameOver;
 
   return (
-    <div className={`screen summary-screen ${summary.gameOver ? 'summary-screen--gameover' : ''}`}>
+    <div className={`screen summary-screen ${summary.gameOver ? 'summary-screen--gameover' : ''} ${notPassed ? 'summary-screen--notpassed' : ''}`}>
       {summary.gameOver ? (
         <>
           <p className="gameover-eyebrow">Shift Report</p>
           <h2 className="gameover-title">No Deliveries Tonight</h2>
           <p className="gameover-tagline">The city didn't see a single package make it home. Regroup and gear up.</p>
+        </>
+      ) : notPassed ? (
+        <>
+          <p className="gameover-eyebrow">Shift Report</p>
+          <h2 className="summary-title">Goal Not Reached</h2>
+          <p className="summary-not-passed">
+            Needed <strong>{summary.deliveryGoal}</strong> deliveries to pass this level — you made{' '}
+            <strong>{summary.deliveriesCompleted}</strong>. Retry to unlock the next level.
+          </p>
         </>
       ) : (
         <>
@@ -52,7 +62,10 @@ export default function NightCompleteScreen({ summary, totalMoney, onContinue })
       <div className="summary-grid">
         <div className="summary-stat">
           <span className="summary-label">Delivered</span>
-          <span className="summary-value">{summary.deliveriesCompleted}</span>
+          <span className="summary-value">
+            {summary.deliveriesCompleted}
+            {summary.deliveryGoal ? ` / ${summary.deliveryGoal}` : ''}
+          </span>
         </div>
         <div className="summary-stat">
           <span className="summary-label">Failed</span>

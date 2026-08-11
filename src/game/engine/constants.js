@@ -253,8 +253,8 @@ export const DELIVERY_TYPES = {
     basePay: 18,
     payPerDistance: 0.05,
     riskMultiplier: 1,
-    timeFactor: 0.009, // seconds of time limit per pixel of distance (~110px/s asymptotic pace)
-    timeBuffer: 6, // flat seconds added so short hops are still makeable
+    timeFactor: 0.014, // seconds of time limit per pixel of distance (~70px/s asymptotic pace — very reachable on a stock bike)
+    timeBuffer: 10, // flat seconds added so short hops are still comfortably makeable
     color: '#7dff5c',
   },
   rush: {
@@ -265,8 +265,8 @@ export const DELIVERY_TYPES = {
     basePay: 25,
     payPerDistance: 0.055,
     riskMultiplier: 1.15,
-    timeFactor: 0.0058, // tight window — demands a near-sustained-top-speed pace
-    timeBuffer: 4,
+    timeFactor: 0.011, // tighter than normal, but still a moderate pace, not a top-speed sprint
+    timeBuffer: 8,
     color: '#2fe8ff',
   },
   danger: {
@@ -277,8 +277,8 @@ export const DELIVERY_TYPES = {
     basePay: 33,
     payPerDistance: 0.065,
     riskMultiplier: 1.5,
-    timeFactor: 0.0075,
-    timeBuffer: 5,
+    timeFactor: 0.012,
+    timeBuffer: 9,
     color: '#ff2f6e',
   },
 };

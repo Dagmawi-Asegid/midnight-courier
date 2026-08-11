@@ -27,6 +27,10 @@ const CURVE = {
   // nights, keeping the curve fair the same way every other axis is countered by an upgrade.
   timePickupCount: { base: 10, max: 20 },
   timeRefillSeconds: { base: 20, max: 30 },
+  // How many deliveries must be completed to actually pass the level (see gameReducer's
+  // NIGHT_ENDED) — climbs gently since level duration is shrinking over the same ramp, and a
+  // player's speed/handling upgrades are what make hitting a higher goal in less time fair.
+  deliveryGoal: { base: 3, max: 6 },
 };
 
 /** 0 on level 1, ramping linearly to 1 by RAMP_LEVELS, then holding steady. */
@@ -52,6 +56,7 @@ export function getDifficulty(level) {
     upgradeCostMultiplier: at('upgradeCostMultiplier'),
     timePickupCount: Math.round(at('timePickupCount')),
     timeRefillSeconds: Math.round(at('timeRefillSeconds')),
+    deliveryGoal: Math.round(at('deliveryGoal')),
   };
 }
 

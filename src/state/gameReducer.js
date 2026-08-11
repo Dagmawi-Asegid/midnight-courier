@@ -81,7 +81,9 @@ export function gameReducer(state, action) {
         longestDeliveryMeters = 0,
         tookDamage = false,
       } = action.payload;
-      const rating = computeNightRating({ deliveriesCompleted, deliveriesFailed, bestCombo });
+      const deliveryGoal = getDifficulty(state.night).deliveryGoal;
+      const rating = computeNightRating({ deliveriesCompleted, deliveriesFailed, bestCombo, deliveryGoal });
+      const goalMet = rating > 0;
       const bonus = computeNightBonus(money, rating);
       const earned = money + bonus;
 
@@ -95,7 +97,12 @@ export function gameReducer(state, action) {
         perfectNights: state.stats.perfectNights + (deliveriesCompleted > 0 && deliveriesFailed === 0 ? 1 : 0),
         untouchableNights: state.stats.untouchableNights + (!tookDamage ? 1 : 0),
         bestComboEver: Math.max(state.stats.bestComboEver, bestCombo),
-        highestLevel: Math.max(state.stats.highestLevel, state.night),
+        // Only advances past a level once its delivery goal is actually met — that's what makes
+        // "passing" mean something instead of every completed timer silently unlocking the next
+        // level. Replaying an already-passed level and falling short this time never regresses it
+        // (Math.max), and a goal miss on the frontier level simply leaves it as the next thing to
+        // retry (see START_NEXT_NIGHT below).
+        highestLevel: goalMet ? Math.max(state.stats.highestLevel, state.night) : state.stats.highestLevel,
       };
 
       const newlyUnlocked = checkNewAchievements(stats, state.achievements);
@@ -124,6 +131,8 @@ export function gameReducer(state, action) {
           distanceTraveled,
           bonus,
           rating,
+          deliveryGoal,
+          goalMet,
           newlyUnlocked,
           // A night with zero completed deliveries gets the dramatic "game over" framing on the
           // results screen instead of the normal one — same continue-to-upgrades flow either

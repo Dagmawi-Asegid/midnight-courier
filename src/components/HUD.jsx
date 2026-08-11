@@ -187,9 +187,12 @@ export default function HUD({ hud, nightDuration, night, city, onPause, onSelect
           <span className="hud-label">Cash</span>
           <span className="hud-value">{formatMoney(hud.money)}</span>
         </div>
-        <div className="hud-pill">
-          <span className="hud-label">Delivered</span>
-          <span className="hud-value">{hud.deliveriesCompleted}</span>
+        <div className={`hud-pill ${hud.deliveryGoal && hud.deliveriesCompleted >= hud.deliveryGoal ? 'hud-pill--goal-met' : ''}`}>
+          <span className="hud-label">Goal</span>
+          <span className="hud-value">
+            {hud.deliveriesCompleted}
+            {hud.deliveryGoal ? `/${hud.deliveryGoal}` : ''}
+          </span>
         </div>
         <ComboBadge combo={hud.combo} />
       </div>
