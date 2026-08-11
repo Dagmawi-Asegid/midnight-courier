@@ -31,14 +31,25 @@ const CURVE = {
   timePickupCount: { base: 10, max: 20 },
   timeRefillSeconds: { base: 20, max: 30 },
   // How many deliveries must be completed to actually pass the level (see gameReducer's
-  // NIGHT_ENDED) — climbs gently since level duration is shrinking over the same ramp, and a
-  // player's speed/handling upgrades are what make hitting a higher goal in less time fair.
-  deliveryGoal: { base: 3, max: 6 },
+  // NIGHT_ENDED). Deliberately small and capped low — see durationProgress below for why this
+  // rides that curve instead of the full 1-20 ramp.
+  deliveryGoal: { base: 3, max: 4 },
 };
 
 /** 0 on level 1, ramping linearly to 1 by RAMP_LEVELS, then holding steady. */
 export function difficultyProgress(level) {
   return Math.min(1, Math.max(0, (level - 1) / (RAMP_LEVELS - 1)));
+}
+
+/** 0 on level 1, ramping to 1 exactly when the night duration hits its floor (level 8), then
+ * holding flat through level 20 — unlike `difficultyProgress`, which keeps climbing the whole
+ * way to level 20. The delivery goal must ride THIS curve, not the full ramp: duration stops
+ * shrinking at level 8, so if the goal kept climbing past that point (as it once did, 3->6 over
+ * the full ramp) every level from 8 to 20 demanded more deliveries in the exact same shrunken
+ * time budget — compounding into a goal that quietly became unreachable deep into a run. */
+function durationProgress(level) {
+  const duration = Math.max(LEVEL_DURATION_FLOOR, LEVEL_DURATION_START - (level - 1) * LEVEL_DURATION_STEP);
+  return (LEVEL_DURATION_START - duration) / (LEVEL_DURATION_START - LEVEL_DURATION_FLOOR);
 }
 
 /** Resolves every difficulty-scaled value for a given level in one place. */
@@ -59,7 +70,7 @@ export function getDifficulty(level) {
     upgradeCostMultiplier: at('upgradeCostMultiplier'),
     timePickupCount: Math.round(at('timePickupCount')),
     timeRefillSeconds: Math.round(at('timeRefillSeconds')),
-    deliveryGoal: Math.round(at('deliveryGoal')),
+    deliveryGoal: Math.round(lerp(CURVE.deliveryGoal.base, CURVE.deliveryGoal.max, durationProgress(level))),
   };
 }
 
